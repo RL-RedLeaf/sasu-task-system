@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import { categoriesApi, type CategoryRow } from '@/api/admin';
@@ -27,8 +27,10 @@ const form = reactive({
   deadlineAt: null as Date | null,
 });
 
-const minDeadline = computed(() => new Date(Date.now() + HOUR));
-const maxDeadline = computed(() => new Date(Date.now() + MAX_DAYS * DAY));
+const minDeadline = new Date(Date.now() + HOUR);
+const maxDeadline = new Date(Date.now() + MAX_DAYS * DAY);
+void minDeadline;
+void maxDeadline;
 
 const rules: FormRules = {
   title: [

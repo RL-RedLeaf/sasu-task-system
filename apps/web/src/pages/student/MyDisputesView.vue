@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import { disputesApi, type DisputeRow } from '@/api/withdrawals';
 import type { NormalizedError } from '@/api/http';
 import EmptyState from '@/components/EmptyState.vue';

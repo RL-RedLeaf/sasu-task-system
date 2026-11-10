@@ -107,7 +107,7 @@ onMounted(() => {
           <template #default="{ row }">{{ fmtTime(row.claimedAt) }}</template>
         </el-table-column>
         <el-table-column label="" width="60" align="right">
-          <template #default="{ row }">
+          <template #default>
             <span class="row-title">›</span>
           </template>
         </el-table-column>
