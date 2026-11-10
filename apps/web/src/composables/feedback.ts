@@ -1,13 +1,13 @@
-import { h, inject, provide, reactive } from 'vue';
-import type { InjectionKey } from 'vue';
+import { h, reactive } from 'vue';
 import { message as staticMessage, Modal } from 'ant-design-vue';
 import { ExclamationCircleOutlined } from '@ant-design/icons-vue';
 import type { ModalFunc, ModalFuncProps } from 'ant-design-vue/es/modal/Modal';
 
 /**
  * 反馈层统一入口：替代原 Element Plus 的 ElMessage / ElMessageBox。
- * message / modal 实例来自 <a-app> 上下文（AppShell 内 provideFeedback），
- * 保证 toast 颜色跟随 antdTheme 主题令牌；useFeedback 未注入时退回静态 API。
+ * 页面直接 `import { message, confirm, prompt } from '@/composables/feedback'`。
+ * AppShell 启动时调用 bindFeedback 把 <a-app> 上下文实例挂到模块级引用上
+ * （toast 颜色跟随 antdTheme）；未绑定时退回 antd 静态 API。
  */
 
 /** 页面只用到字符串 toast；ant-design-vue 静态/上下文两套 MessageInstance
@@ -37,13 +37,7 @@ export interface PromptOptions {
   validate?: (value: string) => true | string;
 }
 
-export interface FeedbackApi {
-  message: ToastApi;
-  /** resolve 于确认，reject('cancel') 于取消/关闭——保持原 ElMessageBox 语义 */
-  confirm(opts: ConfirmOptions): Promise<void>;
-}
-
-export function makeConfirm(confirm: ModalFunc) {
+export function makeConfirm(confirm: ModalFunc): (opts: ConfirmOptions) => Promise<void> {
   return (opts: ConfirmOptions): Promise<void> =>
     new Promise((resolve, reject) => {
       const props: ModalFuncProps = {
@@ -57,6 +51,33 @@ export function makeConfirm(confirm: ModalFunc) {
       if (opts.icon === 'warning') props.icon = h(ExclamationCircleOutlined);
       confirm(props);
     });
+}
+
+interface ContextFeedback {
+  message: ToastApi;
+  confirm: (opts: ConfirmOptions) => Promise<void>;
+}
+
+let ctx: ContextFeedback | null = null;
+
+/** AppShell 挂载时绑定 a-app 上下文实例（message/confirm 颜色随主题）。 */
+export function bindFeedback(api: ContextFeedback): void {
+  ctx = api;
+}
+
+const staticConfirm = makeConfirm(Modal.confirm as ModalFunc);
+
+// ---------- 对外 API（模块级，setup 内外皆可用） ----------
+export const message: ToastApi = {
+  success: (content) => (ctx ? ctx.message.success(content) : staticMessage.success(content)),
+  error: (content) => (ctx ? ctx.message.error(content) : staticMessage.error(content)),
+  warning: (content) => (ctx ? ctx.message.warning(content) : staticMessage.warning(content)),
+  info: (content) => (ctx ? ctx.message.info(content) : staticMessage.info(content)),
+};
+
+/** resolve 于确认，reject('cancel') 于取消/关闭——保持原 ElMessageBox 语义 */
+export function confirm(opts: ConfirmOptions): Promise<void> {
+  return ctx ? ctx.confirm(opts) : staticConfirm(opts);
 }
 
 // ---------- 全局输入弹窗（替代 ElMessageBox.prompt，AntD 无内置 prompt） ----------
@@ -101,16 +122,4 @@ export function settlePrompt(value: string | null): void {
   else promptResolve(value);
   promptResolve = null;
   promptReject = null;
-}
-
-// ---------- 注入 ----------
-const FeedbackKey: InjectionKey<FeedbackApi> = Symbol('feedback');
-
-export function provideFeedback(api: FeedbackApi): void {
-  provide(FeedbackKey, api);
-}
-
-export function useFeedback(): FeedbackApi {
-  // 静态兜底（无 a-app 上下文时）：仅用于极端场景，正常路径都走上下文实例
-  return inject(FeedbackKey, { message: staticMessage, confirm: makeConfirm(Modal.confirm as ModalFunc) });
 }

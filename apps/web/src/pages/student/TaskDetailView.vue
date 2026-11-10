@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { confirm, message, prompt } from '@/composables/feedback';
 import { communityApi } from '@/api/admin';
 import { submissionsApi, tasksApi, type TaskSummary } from '@/api/tasks';
 import { useAuthStore } from '@/stores/auth';
@@ -77,7 +77,7 @@ async function load(): Promise<void> {
       comments.value = [];
     }
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '任务不存在或已下架');
+    message.error((e as NormalizedError).friendlyMessage ?? '任务不存在或已下架');
   } finally {
     loading.value = false;
   }
@@ -87,10 +87,10 @@ async function onClaim(): Promise<void> {
   claiming.value = true;
   try {
     await tasksApi.claim(taskId.value);
-    ElMessage.success('接单成功，请在截止时间前完成并提交交付物');
+    message.success('接单成功，请在截止时间前完成并提交交付物');
     await load();
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '接单失败');
+    message.error((e as NormalizedError).friendlyMessage ?? '接单失败');
   } finally {
     claiming.value = false;
   }
@@ -100,20 +100,22 @@ async function onWithdraw(): Promise<void> {
   const assignmentId = myAssignment.value?.id;
   if (!assignmentId) return;
   try {
-    await ElMessageBox.confirm(
-      '截止前主动取消接单不会计入违约，名额将被释放。确认取消接单？',
-      '取消接单',
-      { type: 'warning', confirmButtonText: '确认取消', cancelButtonText: '再想想' },
-    );
+    await confirm({
+      title: '取消接单',
+      content: '截止前主动取消接单不会计入违约，名额将被释放。确认取消接单？',
+      icon: 'warning',
+      okText: '确认取消',
+      cancelText: '再想想',
+    });
   } catch {
     return;
   }
   try {
     await tasksApi.withdrawClaim(assignmentId);
-    ElMessage.success('已取消接单，名额已释放');
+    message.success('已取消接单，名额已释放');
     await load();
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '取消失败');
+    message.error((e as NormalizedError).friendlyMessage ?? '取消失败');
   }
 }
 
@@ -124,48 +126,45 @@ function goExecution(): void {
 async function onReport(): Promise<void> {
   let reason: string;
   try {
-    const r = await ElMessageBox.prompt(
-      '禁止代课、代考、代写作业、人肉搜索、骚扰他人等内容，违者封号并移交学校处理。',
-      '举报任务',
-      {
-        inputPlaceholder: '请填写举报理由（10-200 字）',
-        inputValidator: (v: string) => {
+    reason = (
+      await prompt({
+        title: '举报任务',
+        message: '禁止代课、代考、代写作业、人肉搜索、骚扰他人等内容，违者封号并移交学校处理。',
+        placeholder: '请填写举报理由（10-200 字）',
+        validate: (v: string) => {
           const n = (v ?? '').trim().length;
           if (n < 10) return '理由至少 10 字';
           if (n > 200) return '理由最多 200 字';
           return true;
         },
-        confirmButtonText: '提交举报',
-        cancelButtonText: '取消',
-      },
-    );
-    reason = r.value.trim();
+      })
+    ).trim();
   } catch {
     return;
   }
   try {
     await communityApi.report({ targetType: 'TASK', targetId: Number(taskId.value), reason });
-    ElMessage.success('举报已提交，管理员将尽快处理');
+    message.success('举报已提交，管理员将尽快处理');
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '举报失败');
+    message.error((e as NormalizedError).friendlyMessage ?? '举报失败');
   }
 }
 
 async function postComment(): Promise<void> {
   const content = commentText.value.trim();
   if (content.length < 1 || content.length > 500) {
-    ElMessage.warning('留言需 1-500 字');
+    message.warning('留言需 1-500 字');
     return;
   }
   posting.value = true;
   try {
     await communityApi.addComment(taskId.value, content);
     commentText.value = '';
-    ElMessage.success('留言已发布');
+    message.success('留言已发布');
     const r = await communityApi.comments(taskId.value);
     comments.value = r.items;
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '留言失败（仅参与任务的用户可发言）');
+    message.error((e as NormalizedError).friendlyMessage ?? '留言失败（仅参与任务的用户可发言）');
   } finally {
     posting.value = false;
   }
@@ -191,7 +190,7 @@ async function downloadFile(fileId: string, fallbackName: string, fallbackMime: 
     a.remove();
     URL.revokeObjectURL(url);
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '下载失败');
+    message.error((e as NormalizedError).friendlyMessage ?? '下载失败');
   }
 }
 
@@ -207,7 +206,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-loading="loading">
+  <a-spin :spinning="loading">
     <template v-if="task">
       <div class="detail-header">
         <div class="detail-title-row">
@@ -215,54 +214,54 @@ onBeforeUnmount(() => {
           <StatusTag :status="task.status" />
         </div>
         <div class="detail-sub">
-          <el-tag size="small" effect="plain" type="info">{{ task.category?.name ?? '未分类' }}</el-tag>
+          <a-tag>{{ task.category?.name ?? '未分类' }}</a-tag>
           <span>发布于 {{ fmtTime(task.createdAt) }}</span>
         </div>
       </div>
 
-      <el-card shadow="never" class="block">
-        <el-descriptions :column="3" border>
-          <el-descriptions-item label="发布教师">{{ task.teacher?.name ?? '—' }}</el-descriptions-item>
-          <el-descriptions-item label="单人赏金">
+      <a-card class="block">
+        <a-descriptions :column="3" bordered>
+          <a-descriptions-item label="发布教师">{{ task.teacher?.name ?? '—' }}</a-descriptions-item>
+          <a-descriptions-item label="单人赏金">
             <span class="reward"><PointsNum :value="task.rewardPerPerson ?? 0" suffix="分" /></span>
-          </el-descriptions-item>
-          <el-descriptions-item label="名额">
+          </a-descriptions-item>
+          <a-descriptions-item label="名额">
             剩余 <b>{{ task.remaining ?? Math.max(0, task.headcount - task.filledCount) }}</b> / {{ task.headcount }}
-          </el-descriptions-item>
-          <el-descriptions-item label="截止时间" :span="2">
+          </a-descriptions-item>
+          <a-descriptions-item label="截止时间" :span="2">
             {{ fmtTime(task.deadlineAt) }}
             <span class="deadline" :style="deadlineUrgent ? { color: 'var(--sasu-color-danger)' } : {}">
               （{{ remainingText(task.deadlineAt) }}）
             </span>
-          </el-descriptions-item>
-          <el-descriptions-item label="地点">{{ task.location || '不限' }}</el-descriptions-item>
-          <el-descriptions-item label="任务描述" :span="3">
+          </a-descriptions-item>
+          <a-descriptions-item label="地点">{{ task.location || '不限' }}</a-descriptions-item>
+          <a-descriptions-item label="任务描述" :span="3">
             <div class="pre-wrap">{{ task.description }}</div>
-          </el-descriptions-item>
-          <el-descriptions-item label="交付要求" :span="3">
+          </a-descriptions-item>
+          <a-descriptions-item label="交付要求" :span="3">
             <div class="pre-wrap">{{ task.requirement || '无特别要求，以任务描述为准' }}</div>
-          </el-descriptions-item>
-          <el-descriptions-item v-if="task.contactInfo && myAssignment" label="联系方式" :span="3">
+          </a-descriptions-item>
+          <a-descriptions-item v-if="task.contactInfo && myAssignment" label="联系方式" :span="3">
             {{ task.contactInfo }}
-          </el-descriptions-item>
-          <el-descriptions-item label="参考附件" :span="3">
+          </a-descriptions-item>
+          <a-descriptions-item label="参考附件" :span="3">
             <template v-if="task.attachments && task.attachments.length > 0">
-              <el-link
+              <a-button
                 v-for="att in task.attachments"
                 :key="att.file.id"
-                type="primary"
+                type="link"
                 class="file-link"
                 @click="downloadFile(att.file.id, att.file.originalName, att.file.mime)"
               >
                 {{ att.file.originalName }}
-              </el-link>
+              </a-button>
             </template>
             <span v-else class="muted">无</span>
-          </el-descriptions-item>
-        </el-descriptions>
+          </a-descriptions-item>
+        </a-descriptions>
 
         <div v-if="isStudent" class="actions">
-          <el-button
+          <a-button
             v-if="canClaim"
             type="primary"
             size="large"
@@ -270,26 +269,26 @@ onBeforeUnmount(() => {
             @click="onClaim"
           >
             接单
-          </el-button>
-          <el-button v-if="canWithdraw" type="warning" plain @click="onWithdraw">取消接单</el-button>
-          <el-button v-if="canSubmit && myAssignment" type="primary" @click="goExecution">去提交交付物</el-button>
-          <el-button v-else-if="myAssignment" type="primary" plain @click="goExecution">查看我的任务进度</el-button>
+          </a-button>
+          <a-button v-if="canWithdraw" @click="onWithdraw">取消接单</a-button>
+          <a-button v-if="canSubmit && myAssignment" type="primary" @click="goExecution">去提交交付物</a-button>
+          <a-button v-else-if="myAssignment" @click="goExecution">查看我的任务进度</a-button>
           <span v-if="canClaim" class="tip">接单后名额立即锁定，截止前取消不计违约</span>
         </div>
-      </el-card>
+      </a-card>
 
-      <el-card shadow="never" class="block">
-        <template #header>
+      <a-card class="block">
+        <template #title>
           <div class="card-header-row">
             <span>任务留言</span>
-            <el-button v-if="auth.isLoggedIn" size="small" type="danger" plain @click="onReport">举报任务</el-button>
+            <a-button v-if="auth.isLoggedIn" size="small" danger @click="onReport">举报任务</a-button>
           </div>
         </template>
         <div v-if="comments.length > 0" class="comment-list">
           <div v-for="c in comments" :key="c.id" class="comment-item">
             <div class="comment-head">
               <b>{{ c.author?.name ?? '匿名' }}</b>
-              <el-tag size="small" effect="plain">{{ roleLabel[c.author?.role] ?? c.author?.role }}</el-tag>
+              <a-tag>{{ roleLabel[c.author?.role] ?? c.author?.role }}</a-tag>
               <span class="time">{{ fmtTime(c.createdAt) }}</span>
             </div>
             <div class="comment-body pre-wrap">{{ c.content }}</div>
@@ -297,23 +296,22 @@ onBeforeUnmount(() => {
         </div>
         <EmptyState v-else description="还没有留言" />
         <div v-if="auth.isLoggedIn" class="comment-input">
-          <el-input
-            v-model="commentText"
-            type="textarea"
+          <a-textarea
+            v-model:value="commentText"
             :rows="3"
-            maxlength="500"
-            show-word-limit
+            :maxlength="500"
+            show-count
             placeholder="留言仅任务参与者可发言（1-500 字）"
           />
-          <el-button type="primary" :loading="posting" @click="postComment">发表留言</el-button>
+          <a-button type="primary" :loading="posting" @click="postComment">发表留言</a-button>
         </div>
         <p v-else class="tip">登录后才能查看与发表留言</p>
-      </el-card>
+      </a-card>
     </template>
     <EmptyState v-else-if="!loading" description="任务不存在或已下架">
-      <el-button type="primary" @click="router.push('/tasks')">返回任务大厅</el-button>
+      <a-button type="primary" @click="router.push('/tasks')">返回任务大厅</a-button>
     </EmptyState>
-  </div>
+  </a-spin>
 </template>
 
 <style scoped>
@@ -359,9 +357,6 @@ onBeforeUnmount(() => {
   gap: 12px;
   flex-wrap: wrap;
 }
-.actions .el-button + .el-button {
-  margin-left: 0;
-}
 .tip {
   color: var(--sasu-text-secondary);
   font-size: 12px;
@@ -371,6 +366,7 @@ onBeforeUnmount(() => {
 }
 .file-link {
   margin-right: 12px;
+  padding: 0;
 }
 .card-header-row {
   display: flex;

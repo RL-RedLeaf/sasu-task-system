@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
-import { Clock, Location, User, Search, Refresh, Coin } from '@element-plus/icons-vue';
+import { message } from '@/composables/feedback';
+import {
+  ClockCircleOutlined,
+  EnvironmentOutlined,
+  UserOutlined,
+  SearchOutlined,
+  ReloadOutlined,
+  GoldOutlined,
+} from '@ant-design/icons-vue';
 import { categoriesApi, type CategoryRow } from '@/api/admin';
 import { tasksApi, type PageData, type TaskSummary } from '@/api/tasks';
 import type { NormalizedError } from '@/api/http';
@@ -94,7 +101,7 @@ async function load(): Promise<void> {
     items.value = data.items;
     total.value = data.total;
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '加载失败');
+    message.error((e as NormalizedError).friendlyMessage ?? '加载失败');
   } finally {
     loading.value = false;
   }
@@ -154,31 +161,36 @@ onBeforeUnmount(() => {
       <p>先到先得接单，按时提交交付物，验收通过即刻获得积分</p>
     </div>
     <div v-if="auth.role === 'STUDENT' && myPoints" class="hero-chip">
-      <el-icon><Coin /></el-icon>
+      <GoldOutlined class="hero-chip-icon" />
       <span>我的可用积分</span>
       <b class="num">{{ myPoints.balance }}</b>
     </div>
   </section>
 
-  <el-card shadow="never" class="filter-card">
+  <a-card class="filter-card">
     <div class="filter-bar">
-      <el-select
-        v-model="filters.categoryId"
+      <a-select
+        v-model:value="filters.categoryId"
         placeholder="全部分类"
-        clearable
-        filterable
+        allow-clear
+        show-search
+        option-filter-prop="label"
         class="w-category"
+        :options="categories.map((c) => ({ label: c.name, value: Number(c.id) }))"
         @change="search"
-      >
-        <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="Number(c.id)" />
-      </el-select>
-      <el-select v-model="filters.status" placeholder="全部状态" clearable class="w-status" @change="search">
-        <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
-      </el-select>
+      />
+      <a-select
+        v-model:value="filters.status"
+        placeholder="全部状态"
+        allow-clear
+        class="w-status"
+        :options="statusOptions"
+        @change="search"
+      />
       <div class="reward-range">
         <span class="range-label">赏金</span>
-        <el-input-number
-          v-model="filters.minReward"
+        <a-input-number
+          v-model:value="filters.minReward"
           :min="1"
           :max="9999"
           :controls="false"
@@ -186,8 +198,8 @@ onBeforeUnmount(() => {
           class="w-num"
         />
         <span class="range-sep">—</span>
-        <el-input-number
-          v-model="filters.maxReward"
+        <a-input-number
+          v-model:value="filters.maxReward"
           :min="1"
           :max="9999"
           :controls="false"
@@ -195,67 +207,78 @@ onBeforeUnmount(() => {
           class="w-num"
         />
       </div>
-      <el-select v-model="filters.orderBy" class="w-sort" @change="search">
-        <el-option v-for="s in sortOptions" :key="s.value" :label="s.label" :value="s.value" />
-      </el-select>
-      <el-input
-        v-model="filters.keyword"
+      <a-select
+        v-model:value="filters.orderBy"
+        class="w-sort"
+        :options="sortOptions"
+        @change="search"
+      />
+      <a-input
+        v-model:value="filters.keyword"
         placeholder="搜索任务标题 / 描述"
-        clearable
+        allow-clear
         class="w-keyword"
-        :prefix-icon="Search"
         @keyup.enter="search"
         @clear="search"
-      />
-      <el-button type="primary" :icon="Search" @click="search">搜索</el-button>
-      <el-button :icon="Refresh" @click="reset">重置</el-button>
+      >
+        <template #prefix><SearchOutlined class="search-prefix" /></template>
+      </a-input>
+      <a-button type="primary" @click="search">
+        <template #icon><SearchOutlined /></template>
+        搜索
+      </a-button>
+      <a-button @click="reset">
+        <template #icon><ReloadOutlined /></template>
+        重置
+      </a-button>
     </div>
-  </el-card>
+  </a-card>
 
-  <div v-loading="loading" class="list-area">
-    <div v-if="items.length > 0" class="cards">
-      <article v-for="t in items" :key="t.id" class="task-card" @click="openDetail(t.id)">
-        <header class="card-head">
-          <span class="cat">{{ t.category?.name ?? '未分类' }}</span>
-          <StatusTag :status="t.status" />
-        </header>
-        <h3 class="title">{{ t.title }}</h3>
-        <div class="meta">
-          <span class="meta-item"><el-icon><User /></el-icon>{{ teacherLabel(t.teacher?.name) }}</span>
-          <span v-if="t.location" class="meta-item"><el-icon><Location /></el-icon>{{ t.location }}</span>
-        </div>
-        <div class="quota-line">
-          <div class="quota-bar">
-            <div class="quota-fill" :style="{ width: quotaPercent(t) + '%' }" />
+  <a-spin :spinning="loading">
+    <div class="list-area">
+      <div v-if="items.length > 0" class="cards">
+        <article v-for="t in items" :key="t.id" class="task-card" @click="openDetail(t.id)">
+          <header class="card-head">
+            <span class="cat">{{ t.category?.name ?? '未分类' }}</span>
+            <StatusTag :status="t.status" />
+          </header>
+          <h3 class="title">{{ t.title }}</h3>
+          <div class="meta">
+            <span class="meta-item"><UserOutlined />{{ teacherLabel(t.teacher?.name) }}</span>
+            <span v-if="t.location" class="meta-item"><EnvironmentOutlined />{{ t.location }}</span>
           </div>
-          <span class="quota-text">
-            已报 <b>{{ t.headcount - (t.remaining ?? t.headcount - t.filledCount) }}</b> / {{ t.headcount }} 人
-          </span>
-        </div>
-        <footer class="card-foot">
-          <div class="reward">
-            <span class="reward-num num">{{ t.rewardPerPerson ?? '—' }}</span>
-            <span class="reward-unit">积分/人</span>
+          <div class="quota-line">
+            <div class="quota-bar">
+              <div class="quota-fill" :style="{ width: quotaPercent(t) + '%' }" />
+            </div>
+            <span class="quota-text">
+              已报 <b>{{ t.headcount - (t.remaining ?? t.headcount - t.filledCount) }}</b> / {{ t.headcount }} 人
+            </span>
           </div>
-          <span class="deadline" :class="{ urgent: isUrgent(t.deadlineAt) }">
-            <el-icon><Clock /></el-icon>
-            {{ remainingText(t.deadlineAt) }}
-          </span>
-        </footer>
-      </article>
+          <footer class="card-foot">
+            <div class="reward">
+              <span class="reward-num num">{{ t.rewardPerPerson ?? '—' }}</span>
+              <span class="reward-unit">积分/人</span>
+            </div>
+            <span class="deadline" :class="{ urgent: isUrgent(t.deadlineAt) }">
+              <ClockCircleOutlined />
+              {{ remainingText(t.deadlineAt) }}
+            </span>
+          </footer>
+        </article>
+      </div>
+      <EmptyState v-else-if="!loading" description="暂无符合条件的任务，换个筛选条件试试" />
     </div>
-    <EmptyState v-else-if="!loading" description="暂无符合条件的任务，换个筛选条件试试" />
-  </div>
+  </a-spin>
 
   <div class="pager">
-    <el-pagination
-      v-model:current-page="page"
+    <a-pagination
+      v-model:current="page"
       :page-size="PAGE_SIZE"
       :total="total"
-      layout="total, prev, pager, next"
-      background
-      hide-on-single-page
-      @current-change="changePage"
+      :show-size-changer="false"
+      :hide-on-single-page="true"
+      @change="changePage"
     />
   </div>
 </template>
@@ -294,7 +317,7 @@ onBeforeUnmount(() => {
   font-size: 13px;
   white-space: nowrap;
 }
-.hero-chip .el-icon {
+.hero-chip-icon {
   color: var(--sasu-color-primary);
 }
 .hero-chip b {
@@ -326,6 +349,9 @@ onBeforeUnmount(() => {
 }
 .w-num {
   width: 90px;
+}
+.search-prefix {
+  color: var(--sasu-text-secondary);
 }
 .reward-range {
   display: flex;
@@ -403,7 +429,7 @@ onBeforeUnmount(() => {
   color: var(--sasu-text-secondary);
   font-size: 13px;
 }
-.meta-item .el-icon {
+.meta-item .anticon {
   font-size: 14px;
 }
 .quota-line {

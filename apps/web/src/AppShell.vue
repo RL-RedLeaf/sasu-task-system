@@ -6,7 +6,7 @@ import { BellOutlined } from '@ant-design/icons-vue';
 import { labelOf } from '@sasu/shared';
 import { useAuthStore } from '@/stores/auth';
 import { useNotificationStore } from '@/stores/notification';
-import { makeConfirm, provideFeedback } from '@/composables/feedback';
+import { bindFeedback, makeConfirm } from '@/composables/feedback';
 import FeedbackHost from '@/components/FeedbackHost.vue';
 
 const auth = useAuthStore();
@@ -14,9 +14,9 @@ const notify = useNotificationStore();
 const route = useRoute();
 const router = useRouter();
 
-// a-app 上下文中的 message/modal（toast 颜色跟随主题），provide 给全站页面
+// a-app 上下文中的 message/modal（toast 颜色跟随主题），绑定到模块级 feedback API
 const { message, modal } = AntApp.useApp();
-provideFeedback({ message, confirm: makeConfirm(modal.confirm) });
+bindFeedback({ message, confirm: makeConfirm(modal.confirm) });
 
 const isStudent = computed(() => auth.role === 'STUDENT');
 const isTeacher = computed(() => auth.role === 'TEACHER' || auth.role === 'ADMIN');

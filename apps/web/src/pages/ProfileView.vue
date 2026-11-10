@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
-import { useFeedback } from '@/composables/feedback';
+import { message } from '@/composables/feedback';
 import type { FormInstance } from 'ant-design-vue';
 import type { Rule } from 'ant-design-vue/es/form';
 import { useAuthStore } from '@/stores/auth';
@@ -9,7 +9,6 @@ import { NormalizedError } from '@/api/http';
 import PageHeader from '@/components/PageHeader.vue';
 
 const auth = useAuthStore();
-const { message } = useFeedback();
 const formRef = ref<FormInstance>();
 const loading = ref(false);
 const form = reactive({ oldPassword: '', newPassword: '', confirm: '' });

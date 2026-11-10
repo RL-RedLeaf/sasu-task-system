@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage, type UploadFile, type UploadUserFile } from 'element-plus';
+import { message } from '@/composables/feedback';
+import { Upload as AUpload, type UploadFile } from 'ant-design-vue';
 import { submissionsApi, tasksApi, type TaskSummary } from '@/api/tasks';
 import type { NormalizedError } from '@/api/http';
 import EmptyState from '@/components/EmptyState.vue';
@@ -59,7 +60,7 @@ const task = ref<TaskSummary | null>(null);
 const loading = ref(false);
 
 const content = ref('');
-const fileList = ref<UploadUserFile[]>([]);
+const fileList = ref<UploadFile[]>([]);
 const submitting = ref(false);
 
 const now = ref(Date.now());
@@ -133,43 +134,47 @@ async function load(): Promise<void> {
       }
     }
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '加载失败');
+    message.error((e as NormalizedError).friendlyMessage ?? '加载失败');
   } finally {
     loading.value = false;
   }
 }
 
-function onFileChange(file: UploadFile, list: UploadFile[]): void {
-  if (list.length > MAX_FILES) {
-    ElMessage.warning(`最多上传 ${MAX_FILES} 个文件`);
-    fileList.value = list.slice(0, MAX_FILES);
-    return;
+/** AntD 手动上传：返回 false 仅跳过上传（文件仍进列表），LIST_IGNORE 连列表都不进 */
+function beforeUpload(file: File): boolean | string {
+  if (fileList.value.length >= MAX_FILES) {
+    message.warning(`最多上传 ${MAX_FILES} 个文件`);
+    return AUpload.LIST_IGNORE;
   }
-  const raw = file.raw as File | undefined;
-  if (raw && raw.size > MAX_FILE_SIZE) {
-    ElMessage.warning(`「${raw.name}」超过 20MB，已移除`);
-    fileList.value = list.filter((f) => f !== file);
+  if (file.size > MAX_FILE_SIZE) {
+    message.warning(`「${file.name}」超过 20MB，已移除`);
+    return AUpload.LIST_IGNORE;
   }
+  return false; // 始终手动提交，不自动上传
+}
+
+function onFileChange(info: { fileList: UploadFile[] }): void {
+  fileList.value = info.fileList.slice(0, MAX_FILES);
 }
 
 async function onSubmit(): Promise<void> {
   const text = content.value.trim();
   if (text.length < 10 || text.length > 1000) {
-    ElMessage.warning('文字说明需 10-1000 字');
+    message.warning('文字说明需 10-1000 字');
     return;
   }
   const files = fileList.value
-    .map((f) => f.raw as File | undefined)
+    .map((f) => f.originFileObj as File | undefined)
     .filter((f): f is File => f instanceof File);
   submitting.value = true;
   try {
     const res = await submissionsApi.submit(assignmentId.value, text, files);
-    ElMessage.success(`提交成功，当前为第 ${res.version} 版，等待教师验收`);
+    message.success(`提交成功，当前为第 ${res.version} 版，等待教师验收`);
     content.value = '';
     fileList.value = [];
     await load();
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '提交失败');
+    message.error((e as NormalizedError).friendlyMessage ?? '提交失败');
   } finally {
     submitting.value = false;
   }
@@ -195,7 +200,7 @@ async function downloadFile(fileId: string, fallbackName: string, fallbackMime: 
     a.remove();
     URL.revokeObjectURL(url);
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '下载失败');
+    message.error((e as NormalizedError).friendlyMessage ?? '下载失败');
   }
 }
 
@@ -211,78 +216,78 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-loading="loading">
+  <a-spin :spinning="loading">
     <PageHeader title="任务执行" subtitle="按时提交交付物；被驳回请在重交窗口内重新提交，最多驳回 3 次" />
 
     <template v-if="assignment">
       <!-- 任务概要 -->
-      <el-card shadow="never" class="block">
-        <template #header>
+      <a-card class="block">
+        <template #title>
           <div class="card-header-row">
             <span>任务概要</span>
             <StatusTag :status="assignment.status" />
           </div>
         </template>
         <div v-if="task" class="summary">
-          <el-link type="primary" class="summary-title" @click="router.push(`/tasks/${task.id}`)">
+          <a-button type="link" class="summary-title" @click="router.push(`/tasks/${task.id}`)">
             {{ task.title }}
-          </el-link>
-          <el-descriptions :column="3" class="summary-desc">
-            <el-descriptions-item label="分类">{{ task.category?.name ?? '—' }}</el-descriptions-item>
-            <el-descriptions-item label="教师">{{ task.teacher?.name ?? '—' }}</el-descriptions-item>
-            <el-descriptions-item label="单人赏金">
+          </a-button>
+          <a-descriptions :column="3" class="summary-desc">
+            <a-descriptions-item label="分类">{{ task.category?.name ?? '—' }}</a-descriptions-item>
+            <a-descriptions-item label="教师">{{ task.teacher?.name ?? '—' }}</a-descriptions-item>
+            <a-descriptions-item label="单人赏金">
               <PointsNum :value="task.rewardPerPerson ?? 0" suffix="分" />
-            </el-descriptions-item>
-            <el-descriptions-item label="接单时间">{{ fmtTime(assignment.claimedAt) }}</el-descriptions-item>
-            <el-descriptions-item label="任务截止">{{ fmtTime(task.deadlineAt) }}</el-descriptions-item>
-            <el-descriptions-item label="驳回次数">
+            </a-descriptions-item>
+            <a-descriptions-item label="接单时间">{{ fmtTime(assignment.claimedAt) }}</a-descriptions-item>
+            <a-descriptions-item label="任务截止">{{ fmtTime(task.deadlineAt) }}</a-descriptions-item>
+            <a-descriptions-item label="驳回次数">
               {{ assignment.rejectCount }} / {{ REJECT_MAX }}
-            </el-descriptions-item>
-          </el-descriptions>
+            </a-descriptions-item>
+          </a-descriptions>
         </div>
         <div v-else class="summary">
           <p class="muted">任务概要暂不可见（接单记录 #{{ assignmentId }}）</p>
         </div>
-      </el-card>
+      </a-card>
 
       <!-- 终态提示 -->
-      <el-alert
+      <a-alert
         v-if="isTerminalBad"
-        :title="terminalHint(assignment.status)"
+        :message="terminalHint(assignment.status)"
         :type="assignment.isViolation ? 'error' : 'info'"
         show-icon
-        :closable="false"
         class="block"
       />
 
       <!-- 重交窗口高亮 -->
-      <el-alert
+      <a-alert
         v-if="status === 'REJECTED'"
         type="error"
         show-icon
-        :closable="false"
         class="block resubmit-alert"
       >
-        <template #title>
+        <template #message>
           第 {{ assignment.rejectCount }} 次被驳回，请在重交窗口内重新提交
           <span :style="resubmitUrgent ? { color: 'var(--sasu-color-danger)', fontWeight: 600 } : {}">
             （重交截止 {{ fmtTime(assignment.resubmitDeadline) }}，{{ resubmitLeft }}）
           </span>
         </template>
-        <div v-if="lastReject" class="pre-wrap">
-          驳回理由：{{ lastReject.reason ?? '（未填写）' }}
-        </div>
-        <div v-else>驳回理由见下方历史版本。</div>
-        <div v-if="assignment.rejectCount >= REJECT_MAX" class="warn-line">
-          已达驳回次数上限（{{ REJECT_MAX }} 次），本次验收只能通过或转管理员仲裁，请尽快与教师沟通。
-        </div>
-      </el-alert>
+        <template #description>
+          <div v-if="lastReject" class="pre-wrap">
+            驳回理由：{{ lastReject.reason ?? '（未填写）' }}
+          </div>
+          <div v-else>驳回理由见下方历史版本。</div>
+          <div v-if="assignment.rejectCount >= REJECT_MAX" class="warn-line">
+            已达驳回次数上限（{{ REJECT_MAX }} 次），本次验收只能通过或转管理员仲裁，请尽快与教师沟通。
+          </div>
+        </template>
+      </a-alert>
 
       <!-- 状态时间线 -->
-      <el-card shadow="never" class="block" header="进度">
-        <el-steps :active="activeStep" align-center finish-status="success">
-          <el-step title="接单" :description="fmtTime(assignment.claimedAt)" />
-          <el-step
+      <a-card class="block" title="进度">
+        <a-steps :current="activeStep">
+          <a-step title="接单" :description="fmtTime(assignment.claimedAt)" />
+          <a-step
             title="提交"
             :description="
               assignment.submissions.length > 0
@@ -290,12 +295,12 @@ onBeforeUnmount(() => {
                 : '未提交'
             "
           />
-          <el-step
+          <a-step
             title="验收"
             :status="reviewStepError ? 'error' : undefined"
             :description="isDone ? fmtTime(assignment.acceptedAt) : reviewStepError ? '已驳回，请重交' : '等待教师验收'"
           />
-        </el-steps>
+        </a-steps>
         <div v-if="isDone" class="earned">
           已获得积分：<PointsNum :value="earned" suffix="分" />
           <span class="muted">（基础 {{ assignment.basePaid }} + 再分配 {{ assignment.bonusPaid }}）</span>
@@ -303,43 +308,38 @@ onBeforeUnmount(() => {
         <div v-if="assignment.isViolation" class="violation">
           违约金：应扣 {{ assignment.violationPenalty }} 分，实扣 {{ assignment.violationDeducted }} 分
         </div>
-      </el-card>
+      </a-card>
 
       <!-- 提交表单 -->
-      <el-card v-if="isActiveStatus" shadow="never" class="block" header="提交交付物">
-        <el-form label-position="top" @submit.prevent="onSubmit">
-          <el-form-item label="文字说明（10-1000 字，提交后不可修改）">
-            <el-input
-              v-model="content"
-              type="textarea"
+      <a-card v-if="isActiveStatus" class="block" title="提交交付物">
+        <a-form layout="vertical" @submit.prevent="onSubmit">
+          <a-form-item label="文字说明（10-1000 字，提交后不可修改）">
+            <a-textarea
+              v-model:value="content"
               :rows="6"
-              maxlength="1000"
-              show-word-limit
+              :maxlength="1000"
+              show-count
               placeholder="描述你完成了什么、结果放在哪里等"
             />
-          </el-form-item>
-          <el-form-item label="附件（选填，最多 5 个，单个 ≤ 20MB）">
-            <el-upload
+          </a-form-item>
+          <a-form-item label="附件（选填，最多 5 个，单个 ≤ 20MB）">
+            <a-upload
               v-model:file-list="fileList"
               multiple
-              :auto-upload="false"
-              :limit="MAX_FILES"
-              :on-change="onFileChange"
-              :on-exceed="() => ElMessage.warning(`最多上传 ${MAX_FILES} 个文件`)"
+              :before-upload="beforeUpload"
+              @change="onFileChange"
             >
-              <el-button type="primary" plain>选择文件</el-button>
-              <template #tip>
-                <div class="upload-tip">支持任意格式，图片 / 文档可直接给教师下载查看</div>
-              </template>
-            </el-upload>
-          </el-form-item>
-          <el-button type="primary" :loading="submitting" @click="onSubmit">提交交付物</el-button>
+              <a-button>选择文件</a-button>
+            </a-upload>
+            <div class="upload-tip">支持任意格式，图片 / 文档可直接给教师下载查看</div>
+          </a-form-item>
+          <a-button type="primary" :loading="submitting" @click="onSubmit">提交交付物</a-button>
           <span v-if="status === 'REJECTED'" class="tip">本次提交将作为新版本（v{{ assignment.rejectCount + 1 }}）</span>
-        </el-form>
-      </el-card>
+        </a-form>
+      </a-card>
 
       <!-- 历史版本 -->
-      <el-card shadow="never" class="block" header="提交历史">
+      <a-card class="block" title="提交历史">
         <div v-if="assignment.submissions.length > 0">
           <div v-for="s in assignment.submissions" :key="s.id" class="version-item">
             <div class="version-head">
@@ -349,24 +349,24 @@ onBeforeUnmount(() => {
             </div>
             <div class="version-body pre-wrap">{{ s.content }}</div>
             <div v-if="s.files && s.files.length > 0" class="version-files">
-              <el-link
+              <a-button
                 v-for="f in s.files"
                 :key="f.file.id"
-                type="primary"
+                type="link"
                 class="file-link"
                 @click="downloadFile(f.file.id, f.file.originalName, f.file.mime)"
               >
                 {{ f.file.originalName }}
-              </el-link>
+              </a-button>
             </div>
             <div
               v-for="r in (assignment.reviews ?? []).filter((x) => x.submissionId === s.id)"
               :key="r.id"
               class="review-line"
             >
-              <el-tag size="small" :type="r.decision === 'ACCEPT' ? 'success' : 'danger'">
+              <a-tag :color="r.decision === 'ACCEPT' ? 'success' : 'error'">
                 {{ r.decision === 'ACCEPT' ? '验收通过' : '验收驳回' }}
-              </el-tag>
+              </a-tag>
               <span v-if="r.isProxy" class="muted">（管理员代验收）</span>
               <span v-if="r.reason" class="pre-wrap">理由：{{ r.reason }}</span>
               <span class="time">{{ fmtTime(r.createdAt) }}</span>
@@ -374,10 +374,10 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <EmptyState v-else description="还没有提交过交付物" />
-      </el-card>
+      </a-card>
     </template>
     <EmptyState v-else-if="!loading" description="接单记录不存在" />
-  </div>
+  </a-spin>
 </template>
 
 <style scoped>
@@ -394,11 +394,13 @@ onBeforeUnmount(() => {
 .summary-title {
   font-size: 15px;
   font-weight: 600;
+  padding: 0;
+  height: auto;
 }
 .summary-desc {
   margin-top: 8px;
 }
-.resubmit-alert :deep(.el-alert__title) {
+.resubmit-alert :deep(.ant-alert-message) {
   white-space: normal;
 }
 .warn-line {
@@ -420,6 +422,7 @@ onBeforeUnmount(() => {
 .upload-tip {
   color: var(--sasu-text-secondary);
   font-size: 12px;
+  margin-top: 4px;
 }
 .tip {
   margin-left: 12px;
@@ -462,6 +465,8 @@ onBeforeUnmount(() => {
 }
 .file-link {
   margin-right: 12px;
+  padding: 0;
+  height: auto;
 }
 .review-line {
   margin-top: 8px;

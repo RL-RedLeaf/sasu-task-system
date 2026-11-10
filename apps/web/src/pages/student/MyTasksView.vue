@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { message } from '@/composables/feedback';
 import { tasksApi, type AssignmentRow } from '@/api/tasks';
 import type { NormalizedError } from '@/api/http';
 import EmptyState from '@/components/EmptyState.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import PointsNum from '@/components/PointsNum.vue';
 import StatusTag from '@/components/StatusTag.vue';
+import AppPagination from '@/components/AppPagination.vue';
+import type { TableColumnsType } from 'ant-design-vue';
 
 const PAGE_SIZE = 20;
 const router = useRouter();
@@ -35,6 +37,15 @@ const total = ref(0);
 const page = ref(1);
 const loading = ref(false);
 
+const columns: TableColumnsType = [
+  { title: '任务标题', key: 'title' },
+  { title: '分类', key: 'category', width: 120 },
+  { title: '单人赏金', key: 'reward', width: 110, align: 'right' },
+  { title: '我的状态', key: 'status', width: 100 },
+  { title: '接单时间', key: 'claimedAt', width: 170 },
+  { title: '', key: 'chevron', width: 60, align: 'right' },
+];
+
 function fmtTime(v: string | null | undefined): string {
   return v ? new Date(v).toLocaleString('zh-CN') : '—';
 }
@@ -49,7 +60,7 @@ async function load(): Promise<void> {
     items.value = data.items as unknown as MyRow[];
     total.value = data.total;
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '加载失败');
+    message.error((e as NormalizedError).friendlyMessage ?? '加载失败');
   } finally {
     loading.value = false;
   }
@@ -59,12 +70,11 @@ function onTabChange(): void {
   page.value = 1;
   void load();
 }
-function changePage(p: number): void {
-  page.value = p;
-  void load();
-}
 function openRow(row: MyRow): void {
   void router.push(`/my/tasks/${row.id}`);
+}
+function customRow(record: MyRow): { onClick: () => void } {
+  return { onClick: () => openRow(record) };
 }
 
 onMounted(() => {
@@ -74,60 +84,51 @@ onMounted(() => {
 
 <template>
   <PageHeader title="我的任务" subtitle="接单后按时提交交付物，被驳回时请在重交窗口内重新提交" />
-  <el-card shadow="never" class="block">
-    <el-tabs v-model="activeTab" @tab-change="onTabChange">
-      <el-tab-pane v-for="t in tabs" :key="t.key" :label="t.label" :name="t.key" />
-    </el-tabs>
-    <div v-loading="loading" class="table-area">
-      <el-table
-        v-if="items.length > 0"
-        :data="items"
-        class="click-table"
-        @row-click="openRow"
-      >
-        <el-table-column label="任务标题" min-width="220">
-          <template #default="{ row }">
-            <span class="row-title">{{ row.task?.title ?? `任务 #${row.taskId}` }}</span>
+  <a-card class="block">
+    <a-tabs v-model:active-key="activeTab" @change="onTabChange">
+      <a-tab-pane v-for="t in tabs" :key="t.key" :tab="t.label" />
+    </a-tabs>
+    <a-spin :spinning="loading">
+      <div class="table-area">
+        <a-table
+          v-if="items.length > 0"
+          :columns="columns"
+          :data-source="items"
+          :pagination="false"
+          row-key="id"
+          class="click-table"
+          :custom-row="customRow"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'title'">
+              <span class="row-title">{{ record.task?.title ?? `任务 #${record.taskId}` }}</span>
+            </template>
+            <template v-else-if="column.key === 'category'">
+              {{ record.task?.category?.name ?? '—' }}
+            </template>
+            <template v-else-if="column.key === 'reward'">
+              <PointsNum :value="record.task?.rewardPerPerson ?? 0" suffix="分" />
+            </template>
+            <template v-else-if="column.key === 'status'">
+              <StatusTag :status="record.status" />
+            </template>
+            <template v-else-if="column.key === 'claimedAt'">
+              {{ fmtTime(record.claimedAt) }}
+            </template>
+            <template v-else-if="column.key === 'chevron'">
+              <span class="row-title">›</span>
+            </template>
           </template>
-        </el-table-column>
-        <el-table-column label="分类" width="120">
-          <template #default="{ row }">{{ row.task?.category?.name ?? '—' }}</template>
-        </el-table-column>
-        <el-table-column label="单人赏金" width="110" align="right">
-          <template #default="{ row }">
-            <PointsNum :value="row.task?.rewardPerPerson ?? 0" suffix="分" />
-          </template>
-        </el-table-column>
-        <el-table-column label="我的状态" width="100">
-          <template #default="{ row }">
-            <StatusTag :status="row.status" />
-          </template>
-        </el-table-column>
-        <el-table-column label="接单时间" width="170">
-          <template #default="{ row }">{{ fmtTime(row.claimedAt) }}</template>
-        </el-table-column>
-        <el-table-column label="" width="60" align="right">
-          <template #default>
-            <span class="row-title">›</span>
-          </template>
-        </el-table-column>
-      </el-table>
-      <EmptyState v-else-if="!loading" description="还没有接过的任务，去任务大厅看看吧">
-        <el-button type="primary" @click="router.push('/tasks')">逛逛任务大厅</el-button>
-      </EmptyState>
-    </div>
+        </a-table>
+        <EmptyState v-else-if="!loading" description="还没有接过的任务，去任务大厅看看吧">
+          <a-button type="primary" @click="router.push('/tasks')">逛逛任务大厅</a-button>
+        </EmptyState>
+      </div>
+    </a-spin>
     <div class="pager">
-      <el-pagination
-        v-model:current-page="page"
-        :page-size="PAGE_SIZE"
-        :total="total"
-        layout="total, prev, pager, next"
-        background
-        hide-on-single-page
-        @current-change="changePage"
-      />
+      <AppPagination v-model:page="page" :page-size="PAGE_SIZE" :total="total" hide-on-single-page @change="load" />
     </div>
-  </el-card>
+  </a-card>
 </template>
 
 <style scoped>
@@ -138,10 +139,11 @@ onMounted(() => {
 .table-area {
   min-height: 160px;
 }
-.click-table {
-  width: 100%;
+.click-table :deep(.ant-table-row) {
   cursor: pointer;
-  --el-table-row-hover-bg-color: var(--sasu-color-primary-light-bg);
+}
+.click-table :deep(.ant-table-tbody > tr.ant-table-row:hover > td) {
+  background: var(--sasu-color-primary-light-bg);
 }
 .row-title {
   font-weight: 600;

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { useFeedback } from '@/composables/feedback';
+import { message } from '@/composables/feedback';
 import { notificationsApi, type NotificationRow } from '@/api/admin';
 import { useNotificationStore } from '@/stores/notification';
 import type { NormalizedError } from '@/api/http';
@@ -11,7 +11,6 @@ import PageHeader from '@/components/PageHeader.vue';
 const PAGE_SIZE = 20;
 const router = useRouter();
 const notifyStore = useNotificationStore();
-const { message } = useFeedback();
 
 const tab = ref<'UNREAD' | 'ALL'>('UNREAD');
 const items = ref<NotificationRow[]>([]);
