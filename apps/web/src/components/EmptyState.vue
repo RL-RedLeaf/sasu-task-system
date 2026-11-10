@@ -3,7 +3,7 @@ defineProps<{ description?: string }>();
 </script>
 
 <template>
-  <el-empty :description="description ?? '这里还没有内容'">
+  <a-empty :description="description ?? '这里还没有内容'">
     <slot />
-  </el-empty>
+  </a-empty>
 </template>
