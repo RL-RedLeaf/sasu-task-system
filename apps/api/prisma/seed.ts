@@ -112,7 +112,7 @@ const SYSTEM_CONFIGS: {
     key: 'WITHDRAW_PENDING_REMIND_DAYS',
     valueType: 'INT',
     value: '3',
-    description: '提现 APPROVED 超时提醒天数',
+    description: '提现审批通过后超时提醒天数（汇率大于 0 时生效）',
   },
   { key: 'LOGIN_MAX_FAILS', valueType: 'INT', value: '5', description: '登录失败锁定阈值' },
   { key: 'LOGIN_LOCK_MINUTES', valueType: 'INT', value: '15', description: '登录锁定时长（分钟）' },

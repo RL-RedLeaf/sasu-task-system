@@ -41,6 +41,50 @@ const GROUPS: Group[] = [
   { title: '其他', order: 99, match: () => true },
 ];
 
+/** 参数的中文显示名（管理页主列）；key 保留为辅助小字便于与接口对照 */
+const paramNames: Record<string, string> = {
+  POINT_TO_CASH_RATE: '积分兑现金汇率',
+  WITHDRAW_MIN_POINTS: '最低提现积分',
+  WITHDRAW_MONTHLY_LIMIT: '每人每月提现次数',
+  WITHDRAW_PERIOD_MODE: '提现额度归属月',
+  WITHDRAW_CASH_LIMIT_SINGLE: '单次提现现金上限',
+  WITHDRAW_CASH_LIMIT_MONTHLY: '每月提现现金上限',
+  WITHDRAW_PENDING_REMIND_DAYS: '提现待发放提醒天数',
+  VIOLATION_RATE_BP: '违约金比例（万分比）',
+  TASK_REWARD_MIN: '单人赏金下限',
+  TASK_REWARD_MAX: '单人赏金上限',
+  TASK_TOTAL_MAX: '单任务总额上限',
+  TASK_HEADCOUNT_MAX: '任务名额上限',
+  TASK_DEADLINE_MIN_HOURS: '截止时间最早提前小时数',
+  TASK_DEADLINE_MAX_DAYS: '截止时间最长天数',
+  TASK_CONCURRENT_CLAIMS_MAX: '学生同时接单上限',
+  TASK_RESUBMIT_WINDOW_HOURS: '驳回后重交窗口时长',
+  TASK_REJECT_MAX: '每笔接单最多驳回次数',
+  TASK_POST_DEADLINE_REVIEW_DAYS: '截止后验收处理时限',
+  TASK_PRICING_REMIND_HOURS: '待定价提醒时点',
+  REVIEW_REMIND_DAYS: '验收超时提醒时点',
+  DEADLINE_REMIND_HOURS: '任务截止前提醒',
+  LOGIN_MAX_FAILS: '登录失败锁定阈值',
+  LOGIN_LOCK_MINUTES: '登录锁定时长',
+  SESSION_DAYS: '会话保持天数',
+  SENSITIVE_REAUTH_MINUTES: '敏感操作再验证时限',
+  UPLOAD_MAX_MB: '单文件上传大小上限',
+  UPLOAD_MAX_FILES: '单次上传文件数上限',
+  NOTIFICATION_READ_RETENTION_DAYS: '已读通知保留天数',
+  AUDIT_RETENTION_YEARS: '审计日志保留年数',
+  TOTAL_ISSUE_WARN: '累计发行预警线',
+};
+
+/** 枚举值的中文翻译（按需补充） */
+const ENUM_VALUE_LABELS: Record<string, string> = {
+  APPLICATION_MONTH: '按申请月计',
+};
+
+function valueText(row: ConfigRow): string {
+  if (row.valueType === 'ENUM') return ENUM_VALUE_LABELS[row.value] ?? row.value;
+  return row.value;
+}
+
 const groups = computed(() => {
   const used = new Set<string>();
   const result: { title: string; rows: ConfigRow[] }[] = [];
@@ -111,25 +155,24 @@ async function submitEdit(): Promise<void> {
     >
       <template #header>{{ group.title }}</template>
       <el-table :data="group.rows" stripe>
-        <el-table-column prop="key" label="参数 Key" width="280">
+        <el-table-column label="参数" min-width="300">
           <template #default="{ row }">
-            <span class="mono">{{ row.key }}</span>
-            <el-tooltip
-              v-if="row.key === 'POINT_TO_CASH_RATE'"
-              content="0 表示提现关闭；改为大于 0 的小数后自动开放学生提现入口"
-              placement="top"
-            >
-              <el-tag type="danger" size="small" class="warn-tag">0 表示提现关闭</el-tag>
-            </el-tooltip>
+            <div class="param-name">
+              {{ paramNames[row.key] ?? row.description ?? row.key }}
+              <el-tooltip
+                v-if="row.key === 'POINT_TO_CASH_RATE'"
+                content="0 表示提现关闭；改为大于 0 的小数后自动开放学生提现入口"
+                placement="top"
+              >
+                <el-tag type="danger" size="small" class="warn-tag">0 表示提现关闭</el-tag>
+              </el-tooltip>
+            </div>
+            <div class="param-key mono">{{ row.key }}</div>
           </template>
         </el-table-column>
-        <el-table-column prop="description" label="说明" min-width="220">
-          <template #default="{ row }">{{ row.description ?? '—' }}</template>
-        </el-table-column>
-        <el-table-column prop="valueType" label="格式" width="90" align="center" />
-        <el-table-column prop="value" label="当前值" width="180">
+        <el-table-column label="当前值" width="220">
           <template #default="{ row }">
-            <span class="mono">{{ row.value }}</span>
+            <span class="mono">{{ valueText(row as ConfigRow) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="100" fixed="right">
@@ -142,7 +185,7 @@ async function submitEdit(): Promise<void> {
     </el-card>
   </div>
 
-  <el-dialog v-model="dialogVisible" :title="editing ? `编辑 ${editing.key}` : '编辑参数'" width="480px">
+  <el-dialog v-model="dialogVisible" :title="editing ? `编辑：${paramNames[editing.key] ?? editing.key}` : '编辑参数'" width="480px">
     <template v-if="editing">
       <el-alert
         v-if="editing.key === 'POINT_TO_CASH_RATE'"
@@ -180,6 +223,16 @@ async function submitEdit(): Promise<void> {
 .mono {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   font-size: 13px;
+}
+.param-name {
+  font-size: 14px;
+  color: var(--sasu-text-primary);
+}
+.param-key {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--sasu-text-secondary);
+  opacity: 0.75;
 }
 .warn-tag {
   margin-left: 8px;
