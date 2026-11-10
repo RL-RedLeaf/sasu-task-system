@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
+import { labelOf } from '@sasu/shared';
 import type { NormalizedError } from '@/api/http';
 import { auditApi, type AuditRow } from '@/api/admin';
 import PageHeader from '@/components/PageHeader.vue';
@@ -8,6 +9,10 @@ import EmptyState from '@/components/EmptyState.vue';
 
 function errMsg(e: unknown): string {
   return (e as NormalizedError).friendlyMessage ?? '操作失败';
+}
+
+function auditActionText(action: string): string {
+  return labelOf.auditAction(action);
 }
 
 function fmtTime(value: string): string {
@@ -86,7 +91,7 @@ onMounted(() => void load());
       </el-table-column>
       <el-table-column label="动作" min-width="180">
         <template #default="{ row }">
-          <span class="mono">{{ row.action }}</span>
+          <span>{{ auditActionText(row.action) }}</span>
         </template>
       </el-table-column>
       <el-table-column label="目标类型" width="140">

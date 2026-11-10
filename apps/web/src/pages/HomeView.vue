@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { ArrowRight } from '@element-plus/icons-vue';
 import { communityApi } from '@/api/admin';
 import { pointsApi } from '@/api/points';
 import { useAuthStore } from '@/stores/auth';
@@ -82,11 +83,12 @@ onMounted(async () => {
   </el-row>
   <el-card shadow="never" class="block">
     <template #header>我的待办</template>
-    <div class="todo-list">
-      <el-button v-for="t in todos" :key="t.to" text type="primary" @click="router.push(t.to)">
-        {{ t.label }} →
-      </el-button>
-    </div>
+    <ul class="todo-list">
+      <li v-for="t in todos" :key="t.to" class="todo-item" @click="router.push(t.to)">
+        <span class="todo-label">{{ t.label }}</span>
+        <el-icon class="todo-arrow"><ArrowRight /></el-icon>
+      </li>
+    </ul>
   </el-card>
 </template>
 
@@ -124,10 +126,31 @@ onMounted(async () => {
   color: var(--sasu-color-danger);
 }
 .todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.todo-item {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--sasu-border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--sasu-text-primary);
+  font-size: 14px;
+  transition: background 0.15s ease;
+}
+.todo-item:last-child {
+  border-bottom: none;
+}
+.todo-item:hover {
+  background: var(--sasu-color-primary-light-bg);
+  color: var(--sasu-color-primary);
+}
+.todo-arrow {
+  color: var(--sasu-text-secondary);
 }
 .muted {
   color: var(--sasu-text-secondary);

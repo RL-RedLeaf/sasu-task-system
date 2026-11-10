@@ -2,6 +2,8 @@
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
+import { Bell } from '@element-plus/icons-vue';
+import { labelOf } from '@sasu/shared';
 import { useAuthStore } from '@/stores/auth';
 import { useNotificationStore } from '@/stores/notification';
 
@@ -15,7 +17,7 @@ const isStudent = computed(() => auth.role === 'STUDENT');
 const isTeacher = computed(() => auth.role === 'TEACHER' || auth.role === 'ADMIN');
 const isAdmin = computed(() => auth.role === 'ADMIN');
 
-const roleLabel: Record<string, string> = { STUDENT: '学生', TEACHER: '教师', ADMIN: '管理员' };
+const roleLabel = labelOf.role;
 
 function isActive(name: string): boolean {
   return route.name === name;
@@ -77,11 +79,13 @@ if (auth.isLoggedIn) notify.startPolling();
       </div>
       <div class="header-right">
         <el-badge :value="notify.unread" :hidden="notify.unread === 0" class="bell">
-          <RouterLink to="/notifications" class="bell-link" aria-label="通知">铃</RouterLink>
+          <RouterLink to="/notifications" class="bell-link" aria-label="站内通知">
+          <el-icon :size="18"><Bell /></el-icon>
+        </RouterLink>
         </el-badge>
         <el-dropdown v-if="auth.user">
           <span class="user-chip">
-            {{ auth.user.name }}（{{ roleLabel[auth.user.role] ?? auth.user.role }}）
+            {{ auth.user.name }}（{{ roleLabel(auth.user.role) }}）
           </span>
           <template #dropdown>
             <el-dropdown-menu>

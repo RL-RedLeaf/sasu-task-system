@@ -9,6 +9,7 @@
     "test": "pnpm --filter @sasu/shared build && vitest run"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "@sasu/shared": "workspace:*",
     "axios": "1.21.1",
     "element-plus": "2.14.8",

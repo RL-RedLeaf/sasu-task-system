@@ -2,15 +2,25 @@
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
+import { Clock, Location, User, Search, Refresh, Coin } from '@element-plus/icons-vue';
 import { categoriesApi, type CategoryRow } from '@/api/admin';
 import { tasksApi, type PageData, type TaskSummary } from '@/api/tasks';
 import type { NormalizedError } from '@/api/http';
 import EmptyState from '@/components/EmptyState.vue';
-import PageHeader from '@/components/PageHeader.vue';
-import PointsNum from '@/components/PointsNum.vue';
 import StatusTag from '@/components/StatusTag.vue';
+import { useAuthStore } from '@/stores/auth';
+import { pointsApi } from '@/api/points';
+
+const auth = useAuthStore();
+const myPoints = ref<{ balance: number } | null>(null);
 
 const PAGE_SIZE = 20;
+
+function teacherLabel(name?: string): string {
+  if (!name) return '—';
+  return name.endsWith('老师') ? name : name + '老师';
+}
+
 const router = useRouter();
 
 const categories = ref<CategoryRow[]>([]);
@@ -111,6 +121,12 @@ function openDetail(id: string): void {
   void router.push(`/tasks/${id}`);
 }
 
+function quotaPercent(t: TaskSummary): number {
+  const filled = t.headcount - (t.remaining ?? t.headcount - t.filledCount);
+  if (t.headcount <= 0) return 0;
+  return Math.min(100, Math.round((filled / t.headcount) * 100));
+}
+
 onMounted(async () => {
   timer = setInterval(() => {
     now.value = Date.now();
@@ -121,6 +137,9 @@ onMounted(async () => {
   } catch {
     // 分类加载失败不阻塞大厅
   }
+  if (auth.role === 'STUDENT') {
+    pointsApi.me().then((r) => (myPoints.value = r)).catch(() => undefined);
+  }
   await load();
 });
 onBeforeUnmount(() => {
@@ -129,8 +148,19 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <PageHeader title="任务大厅" subtitle="先到先得接单，按时提交交付物，验收通过即刻获得积分" />
-  <el-card shadow="never" class="block filter-card">
+  <section class="hall-hero">
+    <div class="hero-text">
+      <h2>任务大厅</h2>
+      <p>先到先得接单，按时提交交付物，验收通过即刻获得积分</p>
+    </div>
+    <div v-if="auth.role === 'STUDENT' && myPoints" class="hero-chip">
+      <el-icon><Coin /></el-icon>
+      <span>我的可用积分</span>
+      <b class="num">{{ myPoints.balance }}</b>
+    </div>
+  </section>
+
+  <el-card shadow="never" class="filter-card">
     <div class="filter-bar">
       <el-select
         v-model="filters.categoryId"
@@ -146,7 +176,7 @@ onBeforeUnmount(() => {
         <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
       </el-select>
       <div class="reward-range">
-        <span class="range-label">赏金区间</span>
+        <span class="range-label">赏金</span>
         <el-input-number
           v-model="filters.minReward"
           :min="1"
@@ -173,46 +203,46 @@ onBeforeUnmount(() => {
         placeholder="搜索任务标题 / 描述"
         clearable
         class="w-keyword"
+        :prefix-icon="Search"
         @keyup.enter="search"
         @clear="search"
       />
-      <el-button type="primary" @click="search">搜索</el-button>
-      <el-button @click="reset">重置</el-button>
+      <el-button type="primary" :icon="Search" @click="search">搜索</el-button>
+      <el-button :icon="Refresh" @click="reset">重置</el-button>
     </div>
   </el-card>
 
   <div v-loading="loading" class="list-area">
     <div v-if="items.length > 0" class="cards">
-      <el-card
-        v-for="t in items"
-        :key="t.id"
-        shadow="never"
-        class="task-card"
-        @click="openDetail(t.id)"
-      >
-        <div class="card-top">
-          <span class="title" :title="t.title">{{ t.title }}</span>
+      <article v-for="t in items" :key="t.id" class="task-card" @click="openDetail(t.id)">
+        <header class="card-head">
+          <span class="cat">{{ t.category?.name ?? '未分类' }}</span>
           <StatusTag :status="t.status" />
+        </header>
+        <h3 class="title">{{ t.title }}</h3>
+        <div class="meta">
+          <span class="meta-item"><el-icon><User /></el-icon>{{ teacherLabel(t.teacher?.name) }}</span>
+          <span v-if="t.location" class="meta-item"><el-icon><Location /></el-icon>{{ t.location }}</span>
         </div>
-        <div class="card-meta">
-          <el-tag size="small" effect="plain" type="info">{{ t.category?.name ?? '未分类' }}</el-tag>
-          <span class="teacher">{{ t.teacher?.name ?? '—' }} 老师</span>
-        </div>
-        <div class="card-info">
-          <span class="reward"><PointsNum :value="t.rewardPerPerson ?? 0" suffix="分/人" /></span>
-          <span class="quota">
-            剩余名额
-            <b :class="{ none: (t.remaining ?? 0) <= 0 }">{{ t.remaining ?? Math.max(0, t.headcount - t.filledCount) }}</b>
-            / {{ t.headcount }}
+        <div class="quota-line">
+          <div class="quota-bar">
+            <div class="quota-fill" :style="{ width: quotaPercent(t) + '%' }" />
+          </div>
+          <span class="quota-text">
+            已报 <b>{{ t.headcount - (t.remaining ?? t.headcount - t.filledCount) }}</b> / {{ t.headcount }} 人
           </span>
         </div>
-        <div class="card-bottom">
-          <span class="deadline" :style="isUrgent(t.deadlineAt) ? { color: 'var(--sasu-color-danger)' } : {}">
+        <footer class="card-foot">
+          <div class="reward">
+            <span class="reward-num num">{{ t.rewardPerPerson ?? '—' }}</span>
+            <span class="reward-unit">积分/人</span>
+          </div>
+          <span class="deadline" :class="{ urgent: isUrgent(t.deadlineAt) }">
+            <el-icon><Clock /></el-icon>
             {{ remainingText(t.deadlineAt) }}
           </span>
-          <el-link type="primary" :underline="false" @click.stop="openDetail(t.id)">查看详情 →</el-link>
-        </div>
-      </el-card>
+        </footer>
+      </article>
     </div>
     <EmptyState v-else-if="!loading" description="暂无符合条件的任务，换个筛选条件试试" />
   </div>
@@ -231,12 +261,50 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.block {
+.hall-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
   border-radius: var(--sasu-radius-base);
-  box-shadow: var(--sasu-shadow-card);
+  background: linear-gradient(135deg, var(--sasu-color-primary-light-bg) 0%, #ffffff 70%);
+  border: 1px solid #f3d9da;
+}
+.hall-hero h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+  color: var(--sasu-text-primary);
+}
+.hall-hero p {
+  margin: 0;
+  color: var(--sasu-text-secondary);
+  font-size: 13px;
+}
+.hero-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #fff;
+  border: 1px solid var(--sasu-border);
+  border-radius: 999px;
+  color: var(--sasu-text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.hero-chip .el-icon {
+  color: var(--sasu-color-primary);
+}
+.hero-chip b {
+  font-size: 18px;
+  color: var(--sasu-color-primary);
 }
 .filter-card {
   margin-bottom: 16px;
+  border-radius: var(--sasu-radius-base);
+  box-shadow: var(--sasu-shadow-card);
 }
 .filter-bar {
   display: flex;
@@ -245,19 +313,19 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 .w-category {
-  width: 150px;
+  width: 140px;
 }
 .w-status {
-  width: 120px;
+  width: 118px;
 }
 .w-sort {
-  width: 120px;
+  width: 118px;
 }
 .w-keyword {
-  width: 220px;
+  width: 230px;
 }
 .w-num {
-  width: 100px;
+  width: 90px;
 }
 .reward-range {
   display: flex;
@@ -278,70 +346,122 @@ onBeforeUnmount(() => {
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 12px;
+  gap: 16px;
 }
 .task-card {
-  border-radius: var(--sasu-radius-base);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px;
+  background: var(--sasu-bg-card);
+  border: 1px solid var(--sasu-border);
+  border-radius: 10px;
   box-shadow: var(--sasu-shadow-card);
   cursor: pointer;
-  transition: box-shadow 0.2s;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
 }
 .task-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+  border-color: #eec3c5;
+  box-shadow: 0 6px 16px rgba(180, 35, 42, 0.1);
 }
-.card-top {
+.card-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
+.cat {
+  font-size: 12px;
+  color: var(--sasu-text-secondary);
+  background: var(--sasu-color-secondary-bg);
+  padding: 2px 10px;
+  border-radius: 999px;
+}
 .title {
-  font-size: 15px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  margin: 10px 0 8px;
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--sasu-text-primary);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.card-meta {
-  margin-top: 8px;
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--sasu-text-secondary);
+  font-size: 13px;
+}
+.meta-item .el-icon {
+  font-size: 14px;
+}
+.quota-line {
+  margin-top: 12px;
   display: flex;
   align-items: center;
   gap: 10px;
 }
-.teacher {
+.quota-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--sasu-border);
+  overflow: hidden;
+}
+.quota-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--sasu-color-primary), #d96c5f);
+  transition: width 0.3s ease;
+}
+.quota-text {
+  font-size: 12px;
   color: var(--sasu-text-secondary);
-  font-size: 13px;
+  white-space: nowrap;
 }
-.card-info {
-  margin-top: 10px;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+.quota-text b {
+  color: var(--sasu-text-primary);
 }
-.reward {
-  font-size: 15px;
-  color: var(--sasu-color-primary);
-}
-.quota {
-  color: var(--sasu-text-secondary);
-  font-size: 13px;
-}
-.quota b.none {
-  color: var(--sasu-color-danger);
-}
-.card-bottom {
-  margin-top: 10px;
-  padding-top: 8px;
+.card-foot {
+  margin-top: 14px;
+  padding-top: 12px;
   border-top: 1px solid var(--sasu-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
-.deadline {
-  font-size: 13px;
+.reward-num {
+  font-size: 20px;
+  color: var(--sasu-color-primary);
+}
+.reward-unit {
+  margin-left: 4px;
+  font-size: 12px;
   color: var(--sasu-text-secondary);
+}
+.deadline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--sasu-text-secondary);
+}
+.deadline.urgent {
+  color: var(--sasu-color-danger);
+  background: var(--sasu-color-primary-light-bg);
+  padding: 2px 10px;
+  border-radius: 999px;
 }
 .pager {
   margin-top: 16px;

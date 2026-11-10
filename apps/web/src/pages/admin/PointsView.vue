@@ -357,7 +357,7 @@ async function confirmUserAdjust(): Promise<void> {
       <el-table-column label="类型" width="130">
         <template #default="{ row }">{{ TX_TYPE_LABELS[row.type as string] ?? row.type }}</template>
       </el-table-column>
-      <el-table-column prop="bizKey" label="业务键" min-width="200" show-overflow-tooltip />
+      <el-table-column prop="reason" label="事由" min-width="180" show-overflow-tooltip><template #default="{ row }">{{ row.reason || '—' }}</template></el-table-column>
       <el-table-column prop="reason" label="原因" min-width="160" show-overflow-tooltip>
         <template #default="{ row }">{{ row.reason ?? '—' }}</template>
       </el-table-column>
