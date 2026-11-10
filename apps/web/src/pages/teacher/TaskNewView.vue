@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
+import { message } from '@/composables/feedback';
+import type { FormInstance } from 'ant-design-vue';
+import type { Rule } from 'ant-design-vue/es/form';
+import type { Dayjs } from 'dayjs';
 import { categoriesApi, type CategoryRow } from '@/api/admin';
 import { tasksApi } from '@/api/tasks';
 import type { NormalizedError } from '@/api/http';
@@ -24,15 +27,10 @@ const form = reactive({
   location: '',
   contactInfo: '',
   headcount: 1,
-  deadlineAt: null as Date | null,
+  deadlineAt: null as Dayjs | null,
 });
 
-const minDeadline = new Date(Date.now() + HOUR);
-const maxDeadline = new Date(Date.now() + MAX_DAYS * DAY);
-void minDeadline;
-void maxDeadline;
-
-const rules: FormRules = {
+const rules: Record<string, Rule[]> = {
   title: [
     { required: true, message: '请输入任务标题', trigger: 'blur' },
     { min: 2, max: 50, message: '标题需 2-50 字', trigger: 'blur' },
@@ -49,14 +47,14 @@ const rules: FormRules = {
   deadlineAt: [
     { required: true, message: '请选择截止时间', trigger: 'change' },
     {
-      validator: (_r, value: Date | null, cb) => {
+      validator: (_r, value: Dayjs | null, cb) => {
         if (!value) {
           cb();
           return;
         }
-        const t = new Date(value).getTime();
-        if (t <= Date.now() + HOUR) cb(new Error('截止时间至少晚于当前 1 小时'));
-        else if (t > Date.now() + MAX_DAYS * DAY) cb(new Error(`截止时间最长不超过 ${MAX_DAYS} 天`));
+        const t = value.valueOf();
+        if (t <= Date.now() + HOUR) cb('截止时间至少晚于当前 1 小时');
+        else if (t > Date.now() + MAX_DAYS * DAY) cb(`截止时间最长不超过 ${MAX_DAYS} 天`);
         else cb();
       },
       trigger: 'change',
@@ -64,8 +62,8 @@ const rules: FormRules = {
   ],
 };
 
-function disabledDate(d: Date): boolean {
-  const t = d.getTime();
+function disabledDate(d: Dayjs): boolean {
+  const t = d.valueOf();
   // 最早当前+1小时（放宽到当天 0 点避免日历整格不可选），最晚 90 天
   return t < Date.now() + HOUR - DAY || t > Date.now() + MAX_DAYS * DAY;
 }
@@ -79,16 +77,16 @@ async function onSubmit(): Promise<void> {
       categoryId: form.categoryId,
       description: form.description.trim(),
       headcount: form.headcount,
-      deadlineAt: new Date(form.deadlineAt as Date).toISOString(),
+      deadlineAt: (form.deadlineAt as Dayjs).toISOString(),
     };
     if (form.requirement.trim()) data.requirement = form.requirement.trim();
     if (form.location.trim()) data.location = form.location.trim();
     if (form.contactInfo.trim()) data.contactInfo = form.contactInfo.trim();
     await tasksApi.create(data);
-    ElMessage.success('任务已提交，等待管理员定价后才会出现在任务大厅');
+    message.success('任务已提交，等待管理员定价后才会出现在任务大厅');
     await router.push('/teacher/tasks');
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '提交失败');
+    message.error((e as NormalizedError).friendlyMessage ?? '提交失败');
   } finally {
     loading.value = false;
   }
@@ -100,101 +98,98 @@ onMounted(async () => {
     categories.value = r.items;
   } catch {
     // 分类加载失败时提示
-    ElMessage.warning('分类加载失败，请刷新重试');
+    message.warning('分类加载失败，请刷新重试');
   }
 });
 </script>
 
 <template>
   <PageHeader title="发布任务" subtitle="填写任务信息提交后，由管理员定价并上架" />
-  <el-alert
+  <a-alert
     class="block"
     type="info"
     show-icon
-    :closable="false"
-    title="赏金由管理员设定，定价后任务才会出现在任务大厅"
+    message="赏金由管理员设定，定价后任务才会出现在任务大厅"
     description="请确保任务内容合规：禁止代课、代考、代写作业、人肉搜索、骚扰他人等内容，违者封号并移交学校处理。"
   />
-  <el-card shadow="never" class="block">
-    <el-form
+  <a-card class="block">
+    <a-form
       ref="formRef"
       :model="form"
       :rules="rules"
-      label-position="top"
+      layout="vertical"
       class="task-form"
       @submit.prevent="onSubmit"
     >
-      <el-form-item label="任务标题（2-50 字）" prop="title">
-        <el-input v-model="form.title" maxlength="50" show-word-limit placeholder="例如：帮忙搬运图书馆新到的书籍" />
-      </el-form-item>
-      <el-form-item label="任务分类" prop="categoryId">
-        <el-select
-          v-model="form.categoryId"
+      <a-form-item label="任务标题（2-50 字）" name="title">
+        <a-input v-model:value="form.title" :maxlength="50" show-count placeholder="例如：帮忙搬运图书馆新到的书籍" />
+      </a-form-item>
+      <a-form-item label="任务分类" name="categoryId">
+        <a-select
+          v-model:value="form.categoryId"
           placeholder="请选择分类"
-          filterable
+          show-search
+          option-filter-prop="label"
           class="w-select"
-        >
-          <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="Number(c.id)" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="任务描述（10-2000 字）" prop="description">
-        <el-input
-          v-model="form.description"
-          type="textarea"
+          :options="categories.map((c) => ({ label: c.name, value: Number(c.id) }))"
+        />
+      </a-form-item>
+      <a-form-item label="任务描述（10-2000 字）" name="description">
+        <a-textarea
+          v-model:value="form.description"
           :rows="6"
-          maxlength="2000"
-          show-word-limit
+          :maxlength="2000"
+          show-count
           placeholder="说清楚做什么、什么时候做、有什么注意事项"
         />
-      </el-form-item>
-      <el-form-item label="交付要求（选填，500 字以内，告诉学生要交什么）" prop="requirement">
-        <el-input
-          v-model="form.requirement"
-          type="textarea"
+      </a-form-item>
+      <a-form-item label="交付要求（选填，500 字以内，告诉学生要交什么）" name="requirement">
+        <a-textarea
+          v-model:value="form.requirement"
           :rows="3"
-          maxlength="500"
-          show-word-limit
+          :maxlength="500"
+          show-count
           placeholder="例如：提交 2 张现场照片 + 一段 100 字的完成说明"
         />
-      </el-form-item>
-      <el-row :gutter="16">
-        <el-col :span="8">
-          <el-form-item label="名额（1-50 人）" prop="headcount">
-            <el-input-number v-model="form.headcount" :min="1" :max="50" :precision="0" controls-position="right" class="w-number" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="16">
-          <el-form-item label="截止时间（最早当前 1 小时后，最晚 90 天）" prop="deadlineAt">
-            <el-date-picker
-              v-model="form.deadlineAt"
-              type="datetime"
+      </a-form-item>
+      <a-row :gutter="16">
+        <a-col :span="8">
+          <a-form-item label="名额（1-50 人）" name="headcount">
+            <a-input-number v-model:value="form.headcount" :min="1" :max="50" :precision="0" class="w-number" />
+          </a-form-item>
+        </a-col>
+        <a-col :span="16">
+          <a-form-item label="截止时间（最早当前 1 小时后，最晚 90 天）" name="deadlineAt">
+            <a-date-picker
+              v-model:value="form.deadlineAt"
+              show-time
               placeholder="选择截止时间"
               format="YYYY-MM-DD HH:mm"
               :disabled-date="disabledDate"
               class="w-picker"
             />
-          </el-form-item>
-        </el-col>
-      </el-row>
-      <el-row :gutter="16">
-        <el-col :span="12">
-          <el-form-item label="地点（选填，100 字以内）" prop="location">
-            <el-input v-model="form.location" maxlength="100" show-word-limit placeholder="例如：图书馆一层服务台" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
-          <el-form-item label="联系方式（选填，仅接单成功的学生可见）" prop="contactInfo">
-            <el-input v-model="form.contactInfo" maxlength="200" show-word-limit placeholder="例如：企业微信 / 邮箱" />
-          </el-form-item>
-        </el-col>
-      </el-row>
-      <el-form-item>
-        <el-button type="primary" :loading="loading" native-type="submit">提交任务</el-button>
-        <el-button @click="router.back()">取消</el-button>
+          </a-form-item>
+        </a-col>
+      </a-row>
+      <a-row :gutter="16">
+        <a-col :span="12">
+          <a-form-item label="地点（选填，100 字以内）" name="location">
+            <a-input v-model:value="form.location" :maxlength="100" show-count placeholder="例如：图书馆一层服务台" />
+          </a-form-item>
+        </a-col>
+        <a-col :span="12">
+          <a-form-item label="联系方式（选填，仅接单成功的学生可见）" name="contactInfo">
+            <a-input v-model:value="form.contactInfo" :maxlength="200" show-count placeholder="例如：企业微信 / 邮箱" />
+          </a-form-item>
+        </a-col>
+      </a-row>
+      <a-form-item>
+        <a-button type="primary" :loading="loading" html-type="submit">提交任务</a-button>
+        <a-button class="btn-cancel" @click="router.back()">取消</a-button>
         <span class="tip">提交后进入「待定价」，管理员设定赏金后学生才可见</span>
-      </el-form-item>
-    </el-form>
-  </el-card>
+      </a-form-item>
+    </a-form>
+  </a-card>
 </template>
 
 <style scoped>
@@ -214,6 +209,9 @@ onMounted(async () => {
 }
 .w-picker {
   width: 100%;
+}
+.btn-cancel {
+  margin-left: 12px;
 }
 .tip {
   margin-left: 12px;
