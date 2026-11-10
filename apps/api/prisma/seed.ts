@@ -171,6 +171,22 @@ async function main(): Promise<void> {
     });
   }
 
+  // 引导管理员（仅不存在任何 ADMIN 时创建；初始密码见输出，首登强制改密）
+  const adminCount = await prisma.user.count({ where: { role: 'ADMIN' } });
+  if (adminCount === 0) {
+    const { hashSync, genSaltSync } = await import('bcryptjs');
+    await prisma.user.create({
+      data: {
+        username: 'admin',
+        name: '系统管理员',
+        role: 'ADMIN',
+        passwordHash: hashSync('Admin@2026', genSaltSync(12)),
+        mustChangePassword: true,
+      },
+    });
+    console.log('seed: bootstrap admin created (username=admin, 初始密码 Admin@2026，首登需改密)');
+  }
+
   const [categories, configs, accounts] = await Promise.all([
     prisma.taskCategory.count(),
     prisma.systemConfig.count(),
