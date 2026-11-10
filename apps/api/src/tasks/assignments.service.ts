@@ -140,6 +140,35 @@ export class AssignmentsService {
     return { released };
   }
 
+  /** 学生「我的任务」列表（含任务概要，S-06） */
+  async myAssignments(
+    studentId: bigint,
+    query: { status?: string[]; skip: number; take: number; page: number; pageSize: number },
+  ) {
+    const where = {
+      studentId,
+      ...(query.status?.length ? { status: { in: query.status as never[] } } : {}),
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.taskAssignment.findMany({
+        where,
+        orderBy: { id: 'desc' },
+        skip: query.skip,
+        take: query.take,
+        include: {
+          task: {
+            include: {
+              category: { select: { name: true } },
+              teacher: { select: { name: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.taskAssignment.count({ where }),
+    ]);
+    return { items, total, page: query.page, pageSize: query.pageSize };
+  }
+
   /** 已通过验收的接单（结算与预览用，余数排序按 accepted_at ASC, id ASC） */
   async passedAssignments(taskId: bigint) {
     return this.prisma.taskAssignment.findMany({

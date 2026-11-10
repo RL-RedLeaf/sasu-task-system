@@ -54,6 +54,19 @@ export class TasksController {
 
   // ---------------- 接单/取消接单 ----------------
 
+  @Get('assignments/me')
+  async myAssignments(@CurrentUser() user: RequestUser, @Query() query: Record<string, unknown>) {
+    const p = parsePage(query);
+    const status = typeof query.status === 'string' && query.status ? query.status.split(',') : undefined;
+    return this.assignments.myAssignments(user.id, {
+      status,
+      page: p.page,
+      pageSize: p.pageSize,
+      skip: p.skip,
+      take: p.take,
+    });
+  }
+
   @HttpCode(200)
   @Post('tasks/:id/claims')
   async claim(@CurrentUser() user: RequestUser, @Param('id') id: string, @Req() req: RequestX) {

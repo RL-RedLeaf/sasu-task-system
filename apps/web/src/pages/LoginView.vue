@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import type { FormInstance, FormRules } from 'element-plus';
-import { Role } from '@sasu/shared';
+import { ElMessage } from 'element-plus';
 import { useAuthStore } from '@/stores/auth';
+import { NormalizedError } from '@/api/http';
 
-/**
- * 登录页骨架（PRD §8.1 /login）。
- * M1 接入 POST /auth/login：失败统一提示「账号或密码错误」，首登强制改密。
- */
 const auth = useAuthStore();
+const route = useRoute();
+const router = useRouter();
 const formRef = ref<FormInstance>();
+const loading = ref(false);
 const form = reactive({ username: '', password: '' });
 const rules: FormRules = {
   username: [{ required: true, message: '请输入学号 / 工号', trigger: 'blur' }],
@@ -18,41 +19,70 @@ const rules: FormRules = {
 
 async function onSubmit(): Promise<void> {
   await formRef.value?.validate();
-  // TODO(M1): 调用 /auth/login；此处仅演示登录态写入
-  auth.setLogin({ id: 0, name: form.username, role: Role.STUDENT });
+  loading.value = true;
+  try {
+    const user = await auth.login(form.username, form.password);
+    if (user.mustChangePassword) {
+      await router.push('/change-password');
+      return;
+    }
+    const redirect = route.query.redirect;
+    await router.push(typeof redirect === 'string' ? redirect : '/');
+  } catch (error) {
+    const err = error as NormalizedError;
+    ElMessage.error(err.friendlyMessage ?? '登录失败');
+  } finally {
+    loading.value = false;
+  }
 }
 </script>
 
 <template>
-  <el-card class="login-card" shadow="never">
-    <h2>登录</h2>
-    <p class="tip">账号由管理员分配，忘记密码请联系管理员。</p>
-    <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent>
-      <el-form-item label="学号 / 工号" prop="username">
-        <el-input v-model="form.username" autocomplete="username" />
-      </el-form-item>
-      <el-form-item label="密码" prop="password">
-        <el-input
-          v-model="form.password"
-          type="password"
-          show-password
-          autocomplete="current-password"
-        />
-      </el-form-item>
-      <el-button type="primary" native-type="submit" @click="onSubmit">登录</el-button>
-    </el-form>
-  </el-card>
+  <div class="login-wrap">
+    <el-card class="login-card" shadow="never">
+      <h2 class="login-title">登录</h2>
+      <p class="tip">账号由管理员分配，忘记密码请联系管理员。首次登录需修改初始密码。</p>
+      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent>
+        <el-form-item label="学号 / 工号" prop="username">
+          <el-input v-model="form.username" autocomplete="username" placeholder="学号 / 工号" />
+        </el-form-item>
+        <el-form-item label="密码" prop="password">
+          <el-input
+            v-model="form.password"
+            type="password"
+            show-password
+            autocomplete="current-password"
+            placeholder="密码"
+          />
+        </el-form-item>
+        <el-button class="submit" type="primary" native-type="submit" :loading="loading" @click="onSubmit">
+          登录
+        </el-button>
+      </el-form>
+    </el-card>
+  </div>
 </template>
 
 <style scoped>
+.login-wrap {
+  display: flex;
+  justify-content: center;
+  padding-top: 48px;
+}
 .login-card {
-  max-width: 380px;
-  margin: 48px auto;
+  width: 380px;
   border-radius: var(--sasu-radius-base);
   box-shadow: var(--sasu-shadow-card);
+}
+.login-title {
+  margin: 0 0 4px;
 }
 .tip {
   color: var(--sasu-text-secondary);
   font-size: 12px;
+  margin-top: 0;
+}
+.submit {
+  width: 100%;
 }
 </style>

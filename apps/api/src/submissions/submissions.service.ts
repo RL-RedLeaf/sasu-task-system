@@ -122,7 +122,12 @@ export class SubmissionsService {
     const isTeacher = assignment.task.teacherId === studentId;
     // 归属教师/本人/管理员（管理员走 admin 路由）
     if (!isOwner && !isTeacher) throw ApiError.of('FORBIDDEN');
-    return assignment;
+    // 附上评审记录（驳回理由展示用）
+    const reviews = await this.prisma.review.findMany({
+      where: { assignmentId },
+      orderBy: { id: 'desc' },
+    });
+    return { ...assignment, reviews };
   }
 
   /**

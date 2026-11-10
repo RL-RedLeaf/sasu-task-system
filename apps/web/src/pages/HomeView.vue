@@ -14,7 +14,7 @@ const auth = useAuthStore();
       M0 脚手架已就绪：主题主色、路由骨架、Pinia、按需 Element Plus。 登录与业务页面按里程碑 M1–M5
       交付。
     </p>
-    <el-button type="primary" @click="() => auth.clear()">示例主按钮（#B4232A）</el-button>
+    
   </el-card>
 </template>
 

@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import { Role } from '@sasu/shared';
 import { useAuthStore } from './auth';
 
-describe('useAuthStore（M0 骨架）', () => {
+describe('useAuthStore（前端会话状态）', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
   });
@@ -12,16 +11,16 @@ describe('useAuthStore（M0 骨架）', () => {
     const auth = useAuthStore();
     expect(auth.isLoggedIn).toBe(false);
     expect(auth.role).toBeNull();
+    expect(auth.mustChangePassword).toBe(false);
   });
 
-  it('setLogin / clear 切换登录态与角色', () => {
+  it('reset 清空会话', async () => {
     const auth = useAuthStore();
-    auth.setLogin({ id: 1, name: '张老师', role: Role.TEACHER });
+    // 直接触发内部状态（绕过 API）
+    auth.$patch({ user: { id: '1', username: 't1', name: 'T', role: 'TEACHER', mustChangePassword: false }, loaded: true } as never);
     expect(auth.isLoggedIn).toBe(true);
-    expect(auth.role).toBe(Role.TEACHER);
-
-    auth.clear();
+    auth.reset();
     expect(auth.isLoggedIn).toBe(false);
-    expect(auth.user).toBeNull();
+    expect(auth.loaded).toBe(false);
   });
 });
