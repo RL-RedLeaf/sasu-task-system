@@ -510,7 +510,7 @@ async function copyAllPasswords(): Promise<void> {
 .pwd-box {
   margin-top: 12px;
   background: var(--sasu-bg-page);
-  border-radius: 8px;
+  border-radius: var(--sasu-radius-base);
   padding: 12px;
 }
 .pwd-line {

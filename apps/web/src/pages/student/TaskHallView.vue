@@ -354,7 +354,7 @@ onBeforeUnmount(() => {
   padding: 18px 20px;
   background: var(--sasu-bg-card);
   border: 1px solid var(--sasu-border);
-  border-radius: 10px;
+  border-radius: var(--sasu-radius-card);
   box-shadow: var(--sasu-shadow-card);
   cursor: pointer;
   transition:
