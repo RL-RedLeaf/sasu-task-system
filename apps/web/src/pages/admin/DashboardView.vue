@@ -289,6 +289,15 @@ onMounted(() => {
 .block {
   border-radius: var(--sasu-radius-base);
   box-shadow: var(--sasu-shadow-card);
+  height: 100%;
+}
+/* 同一行内的卡片等高：el-col 变 flex，卡片撑满列高 */
+.equal-row > .el-col {
+  display: flex;
+  flex-direction: column;
+}
+.equal-row > .el-col > .el-card {
+  flex: 1;
 }
 .dist-row {
   display: flex;
