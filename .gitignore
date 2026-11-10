@@ -148,3 +148,6 @@ apps/web/components.d.ts
 # Docs (local-only, not committed)
 docs/
 
+
+# 本地 UI 打磨工作区（对比稿/截图，不入库）
+/temp/
