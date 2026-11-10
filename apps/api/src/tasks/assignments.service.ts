@@ -6,7 +6,6 @@ import { ConfigService } from '../common/config/config.service';
 import { NotificationService } from '../notifications/notification.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { PricingService } from './pricing.service';
-import type { TxClient } from '../ledger/ledger.service';
 
 /** 接单域：并发接单（§9.4）/取消/违约判定（§6.3）/名额释放 */
 @Injectable()
@@ -22,7 +21,7 @@ export class AssignmentsService {
   ) {}
 
   /** 学生接单：单条条件 UPDATE 防超卖 + 并发上限 5 + attempt_no 递增 */
-  async claim(studentId: bigint, taskId: bigint, meta: { requestId?: string }) {
+  async claim(studentId: bigint, taskId: bigint, _meta?: { requestId?: string }) {
     const task = await this.prisma.task.findUnique({ where: { id: taskId } });
     if (!task) throw ApiError.of('TASK_STATE_NOT_ALLOWED', '任务不存在');
     if (task.status === TaskStatus.PENDING_REWARD) throw ApiError.of('TASK_PENDING_REWARD');
@@ -102,7 +101,7 @@ export class AssignmentsService {
   }
 
   /** 截止前主动取消接单：不计违约（PRD S-04） */
-  async withdraw(studentId: bigint, assignmentId: bigint, meta: { requestId?: string }) {
+  async withdraw(studentId: bigint, assignmentId: bigint, _meta?: { requestId?: string }) {
     const assignment = await this.prisma.taskAssignment.findUnique({
       where: { id: assignmentId },
       include: { task: { select: { id: true, title: true, teacherId: true, deadlineAt: true, status: true } } },

@@ -5,7 +5,6 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { NotificationService } from '../notifications/notification.service';
 import { AuditService } from '../common/audit/audit.service';
 import { LedgerService } from '../ledger/ledger.service';
-import type { TxClient } from '../ledger/ledger.service';
 import { PricingService } from './pricing.service';
 
 export interface OperatorMeta {
