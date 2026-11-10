@@ -25,6 +25,14 @@ export default defineConfig({
       '/healthz': { target: 'http://localhost:3000', changeOrigin: true },
     },
   },
+  preview: {
+    // 生产构建本地预览（vite preview），与 server 同样的代理
+    port: 4173,
+    proxy: {
+      '/api': { target: 'http://localhost:3000', changeOrigin: true },
+      '/healthz': { target: 'http://localhost:3000', changeOrigin: true },
+    },
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,
