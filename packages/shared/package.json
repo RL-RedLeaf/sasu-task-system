@@ -1,0 +1,26 @@
+{
+  "name": "@sasu/shared",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "前后端共享：错误码枚举、状态机枚举、DTO 类型（PRD §12.1：禁止两端各写一份）",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // ESM 产物：web 浏览器端要求真 ESM 具名导出（Vite dev 对 linked CJS 包不做 interop）；
+    // api（CJS）在 Node 24 上 require(esm) 原生支持，不受影响。
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true
+  },
+  "include": ["src"]
+}

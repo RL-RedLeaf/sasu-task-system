@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    name: lint / typecheck / test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm（版本取 packageManager 字段）
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node（.nvmrc = 24 LTS）
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # 硬约束（PRD §12）：流水线内禁止 pnpm add / pnpm update
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+  migrate:
+    name: prisma migrate deploy + seed
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: sasu_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=30
+          --health-start-period=30s
+    env:
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/sasu_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Migrate deploy（空库跑到最新）
+        run: pnpm --filter @sasu/api db:migrate
+
+      - name: Seed（6 分类 + 30 配置 + 系统账户）
+        run: pnpm --filter @sasu/api db:seed
+
+      - name: Seed 幂等（重复执行不报错）
+        run: pnpm --filter @sasu/api db:seed

@@ -1,0 +1,868 @@
+// SASU 校园任务平台 · 数据模型（PRD §9.2）
+//
+// 约定：
+// - 积分一律 Int；现金 Decimal(10,2)；汇率 Decimal(10,4)；时间 DateTime(3)（毫秒，对齐 NOW(3)）。
+// - 账本类表（point_transactions / point_legs / audit_logs）只追加、不修改、不删除。
+// - 生成列（active_flag）、依赖它的唯一键（uk_active*）与 CHECK 约束只写在 migration SQL，
+//   不在 schema 中（Prisma 不支持），见 prisma/README.md。
+// - point_transactions 的 taskId/assignmentId/withdrawalId/disputeId/operatorId 为裸外键，
+//   不建 Prisma relation（多态目标 + 追加性能考量），对应关系由对账任务校验（PRD §9.3 不变式 9）。
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  // Prisma 7：连接串在 prisma.config.ts 的 datasource.url 中配置，schema 不再持有 url
+}
+
+// ---------- 用户与账号 ----------
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+model User {
+  id                 BigInt     @id @default(autoincrement())
+  username           String     @unique @db.VarChar(32) // 学号/工号，登录名
+  name               String     @db.VarChar(32)
+  role               Role
+  className          String?    @map("class_name") @db.VarChar(64) // 班级/部门
+  email              String?    @db.VarChar(128) // 仅通知用，不对外展示（PRD §7.1 隐私原则）
+  passwordHash       String     @map("password_hash") @db.VarChar(255) // Argon2id / bcrypt
+  mustChangePassword Boolean    @default(false) @map("must_change_password")
+  status             UserStatus @default(ACTIVE)
+  tokenVersion       Int        @default(0) @map("token_version") // 禁用/改密时 +1，旧 token 立即失效
+  lastLoginAt        DateTime?  @map("last_login_at") @db.DateTime(3)
+  violationCount     Int        @default(0) @map("violation_count")
+  penaltyDebt        Int        @default(0) @map("penalty_debt") // 欠分，未来入账优先抵扣
+  disabledReason     String?    @map("disabled_reason") @db.VarChar(255)
+  version            Int        @default(0) // 乐观锁
+  createdAt          DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime   @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  teacherTasks         Task[]              @relation("TeacherTasks")
+  createdTasks         Task[]              @relation("CreatedTasks")
+  studentAssignments   TaskAssignment[]    @relation("StudentAssignments")
+  assignmentEvents     AssignmentEvent[]   @relation("AssignmentEvents")
+  taskEvents           TaskEvent[]         @relation("TaskEvents")
+  taskEdits            TaskEditHistory[]   @relation("TaskEditHistory")
+  submissions          Submission[]        @relation("StudentSubmissions")
+  reviews              Review[]            @relation("ReviewerReviews")
+  comments             Comment[]           @relation("CommentAuthor")
+  notifications        Notification[]
+  uploadedFiles        File[]              @relation("FileUploader")
+  withdrawals          Withdrawal[]        @relation("WithdrawalStudent")
+  disputesInitiated    Dispute[]           @relation("DisputeInitiator")
+  disputesResponded    Dispute[]           @relation("DisputeRespondent")
+  reports              Report[]            @relation("ReportReporter")
+  announcements        Announcement[]      @relation("AnnouncementAuthor")
+  imports              ImportBatch[]       @relation("ImportOperator")
+  audits               AuditLog[]          @relation("AuditActor")
+  systemConfigUpdates  SystemConfig[]      @relation("ConfigUpdater")
+  disputeEvidence      DisputeEvidence[]
+
+  @@map("users")
+}
+
+model LoginAttempt {
+  id        BigInt   @id @default(autoincrement())
+  username  String   @db.VarChar(32)
+  ip        String   @db.VarChar(64)
+  success   Boolean
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([username, createdAt])
+  @@index([ip, createdAt])
+  @@map("login_attempts")
+}
+
+model ImportBatch {
+  id          BigInt   @id @default(autoincrement())
+  fileName    String   @map("file_name") @db.VarChar(255)
+  totalRows   Int      @default(0) @map("total_rows")
+  successRows Int      @default(0) @map("success_rows")
+  failedRows  Int      @default(0) @map("failed_rows")
+  createdBy   BigInt   @map("created_by")
+  creator     User     @relation("ImportOperator", fields: [createdBy], references: [id])
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  errors      ImportError[]
+
+  @@map("import_batches")
+}
+
+model ImportError {
+  id      BigInt  @id @default(autoincrement())
+  batchId BigInt  @map("batch_id")
+  batch   ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  rowNum  Int     @map("row_num")
+  reason  String  @db.VarChar(500)
+  rawData Json?   @map("raw_data")
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([batchId])
+  @@map("import_errors")
+}
+
+// ---------- 任务域 ----------
+
+model TaskCategory {
+  id          BigInt    @id @default(autoincrement())
+  name        String    @unique @db.VarChar(32)
+  description String?   @db.VarChar(255)
+  sortOrder   Int       @default(0) @map("sort_order")
+  deletedAt   DateTime? @map("deleted_at") // 有历史任务引用时软删除
+  createdAt   DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  tasks       Task[]
+
+  @@map("task_categories")
+}
+
+enum TaskStatus {
+  PENDING_REWARD // 待管理员定价，学生不可见
+  RECRUITING
+  FULL
+  OFFLINE
+  CLOSED
+  SETTLED
+  CANCELLED
+}
+
+enum SettlementStatus {
+  OPEN
+  SETTLING
+  DONE
+}
+
+enum SettlementMode {
+  NORMAL
+  REFUND_ONLY
+}
+
+enum CancelType {
+  TEACHER
+  ADMIN
+}
+
+model Task {
+  id               BigInt           @id @default(autoincrement())
+  teacherId        BigInt           @map("teacher_id") // 业务归属教师（代发时必填）
+  createdBy        BigInt           @map("created_by") // 实际操作人（教师或管理员）
+  categoryId       BigInt           @map("category_id")
+  title            String           @db.VarChar(50)
+  description      String           @db.VarChar(2000)
+  requirement      String?          @db.Text // 交付要求
+  location         String?          @db.VarChar(100)
+  contactInfo      String?          @map("contact_info") @db.VarChar(200) // 仅接单成功学生可见
+  rewardPerPerson  Int?             @map("reward_per_person") // PENDING_REWARD 时为 NULL
+  headcount        Int
+  // total_amount 为累计划入托管额，只增不减；refunded_amount 为累计退回池金额（PRD §6.1）
+  totalAmount      Int              @default(0) @map("total_amount")
+  filledCount      Int              @default(0) @map("filled_count")
+  acceptedCount    Int              @default(0) @map("accepted_count")
+  paidBaseAmount   Int              @default(0) @map("paid_base_amount") // 含改价补差
+  paidBonusAmount  Int              @default(0) @map("paid_bonus_amount")
+  refundedAmount   Int              @default(0) @map("refunded_amount")
+  status           TaskStatus       @default(PENDING_REWARD)
+  settlementStatus SettlementStatus @default(OPEN) @map("settlement_status")
+  settlementMode   SettlementMode   @default(NORMAL) @map("settlement_mode")
+  cancelType       CancelType?      @map("cancel_type")
+  cancelReason     String?          @map("cancel_reason") @db.VarChar(255)
+  pricedAt         DateTime?        @map("priced_at") @db.DateTime(3)
+  pricedBy         BigInt?          @map("priced_by")
+  deadlineAt       DateTime         @map("deadline_at") @db.DateTime(3)
+  closedAt         DateTime?        @map("closed_at") @db.DateTime(3)
+  settledAt        DateTime?        @map("settled_at") @db.DateTime(3)
+  targetGrades     Json?            @map("target_grades") // MVP 建而不用（P1 启用）
+  version          Int              @default(0) // 乐观锁
+  createdAt        DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  teacher        User          @relation("TeacherTasks", fields: [teacherId], references: [id])
+  creator        User          @relation("CreatedTasks", fields: [createdBy], references: [id])
+  category       TaskCategory  @relation(fields: [categoryId], references: [id])
+  attachments    TaskAttachment[]
+  assignments    TaskAssignment[]
+  events         TaskEvent[]
+  edits          TaskEditHistory[]
+  comments       Comment[]
+  settlementBatch SettlementBatch?
+  settlements    TaskSettlement[]
+
+  @@index([status, deadlineAt], map: "idx_status_deadline")
+  @@index([teacherId, status], map: "idx_teacher_status")
+  @@index([status, createdAt], map: "idx_pending")
+  @@map("tasks")
+}
+
+model TaskAttachment {
+  id        BigInt   @id @default(autoincrement())
+  taskId    BigInt   @map("task_id")
+  fileId    BigInt   @map("file_id")
+  task      Task     @relation(fields: [taskId], references: [id])
+  file      File     @relation(fields: [fileId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([taskId])
+  @@map("task_attachments")
+}
+
+enum AssignmentStatus {
+  CLAIMED
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  FAILED
+  OVERDUE
+  WITHDRAWN
+  CANCELLED_BY_TEACHER
+  SETTLED
+}
+
+model TaskAssignment {
+  id                BigInt           @id @default(autoincrement())
+  taskId            BigInt           @map("task_id")
+  studentId         BigInt           @map("student_id")
+  attemptNo         Int              @map("attempt_no") // 第几次接单尝试，从 1 开始
+  status            AssignmentStatus @default(CLAIMED)
+  claimedAt         DateTime         @map("claimed_at") @db.DateTime(3)
+  acceptedAt        DateTime?        @map("accepted_at") @db.DateTime(3) // 余数分配排序用（PRD §5.2）
+  withdrawnAt       DateTime?        @map("withdrawn_at") @db.DateTime(3)
+  failedAt          DateTime?        @map("failed_at") @db.DateTime(3)
+  overdueAt         DateTime?        @map("overdue_at") @db.DateTime(3)
+  resubmitDeadline  DateTime?        @map("resubmit_deadline") @db.DateTime(3)
+  rejectCount       Int              @default(0) @map("reject_count") // 上限 3 次
+  basePaid          Int              @default(0) @map("base_paid") // 已发基础分，含改价补差
+  rewardPaidRate    Int?             @map("reward_paid_rate") // 实际发放时采用的单人赏金
+  bonusPaid         Int              @default(0) @map("bonus_paid")
+  passed            Boolean          @default(false) // 是否通过（含仲裁改判）
+  isViolation       Boolean          @default(false) @map("is_violation")
+  violationPenalty  Int              @default(0) @map("violation_penalty") // 应扣
+  violationDeducted Int              @default(0) @map("violation_deducted") // 实扣（含欠分抵扣）
+  version           Int              @default(0) // 乐观锁
+
+  task         Task               @relation(fields: [taskId], references: [id])
+  student      User               @relation("StudentAssignments", fields: [studentId], references: [id])
+  submissions  Submission[]
+  reviews      Review[]
+  events       AssignmentEvent[]
+  settlements  TaskSettlement[]
+
+  @@unique([taskId, studentId, attemptNo], map: "uk_attempt")
+  // 以下唯一键在 migration SQL 中补建（依赖生成列 active_flag）：
+  // UNIQUE KEY uk_active (task_id, student_id, active_flag)
+  @@index([taskId, status])
+  @@index([studentId, status])
+  @@map("task_assignments")
+}
+
+model TaskEvent {
+  id           BigInt      @id @default(autoincrement())
+  taskId       BigInt      @map("task_id")
+  fromStatus   TaskStatus? @map("from_status")
+  toStatus     TaskStatus  @map("to_status")
+  actorId      BigInt?     @map("actor_id") // 定时任务为 NULL
+  reason       String?     @db.VarChar(255)
+  requestId    String?     @db.VarChar(64)
+  createdAt    DateTime    @default(now()) @map("created_at") @db.DateTime(3)
+  task         Task        @relation(fields: [taskId], references: [id])
+  actor        User?       @relation("TaskEvents", fields: [actorId], references: [id])
+
+  @@index([taskId, id])
+  @@map("task_events")
+}
+
+model AssignmentEvent {
+  id           BigInt           @id @default(autoincrement())
+  assignmentId BigInt           @map("assignment_id")
+  fromStatus   AssignmentStatus? @map("from_status")
+  toStatus     AssignmentStatus @map("to_status")
+  actorId      BigInt?          @map("actor_id")
+  reason       String?          @db.VarChar(255)
+  requestId    String?          @db.VarChar(64)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  assignment   TaskAssignment   @relation(fields: [assignmentId], references: [id])
+  actor        User?            @relation("AssignmentEvents", fields: [actorId], references: [id])
+
+  @@index([assignmentId, id])
+  @@map("assignment_events")
+}
+
+model TaskEditHistory {
+  id        BigInt   @id @default(autoincrement())
+  taskId    BigInt   @map("task_id")
+  editorId  BigInt   @map("editor_id")
+  field     String   @db.VarChar(32) // 每个被修改字段一行
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  task      Task     @relation(fields: [taskId], references: [id])
+  editor    User     @relation("TaskEditHistory", fields: [editorId], references: [id])
+
+  @@index([taskId, id])
+  @@map("task_edit_history")
+}
+
+enum SubmissionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model Submission {
+  id           BigInt           @id @default(autoincrement())
+  assignmentId BigInt           @map("assignment_id")
+  version      Int // 第几次提交
+  content      String           @db.VarChar(1000) // 文字说明 10–1000 字
+  status       SubmissionStatus @default(PENDING)
+  submittedAt  DateTime         @default(now()) @map("submitted_at") @db.DateTime(3)
+  reviewedAt   DateTime?        @map("reviewed_at") @db.DateTime(3)
+  studentId    BigInt           @map("student_id") // 冗余，便于按学生检索
+
+  assignment TaskAssignment   @relation(fields: [assignmentId], references: [id])
+  student    User             @relation("StudentSubmissions", fields: [studentId], references: [id])
+  files      SubmissionFile[]
+  reviews    Review[]
+
+  @@unique([assignmentId, version], map: "uk_submission_version")
+  @@map("submissions")
+}
+
+model SubmissionFile {
+  id           BigInt @id @default(autoincrement())
+  submissionId BigInt @map("submission_id")
+  fileId       BigInt @map("file_id")
+  submission   Submission @relation(fields: [submissionId], references: [id])
+  file         File       @relation(fields: [fileId], references: [id])
+
+  @@unique([submissionId, fileId])
+  @@map("submission_files")
+}
+
+enum ReviewDecision {
+  ACCEPT
+  REJECT
+}
+
+/// 验收的唯一事实来源（submissions.status 仅作冗余展示，PRD §9.2）
+model Review {
+  id           BigInt         @id @default(autoincrement())
+  submissionId BigInt         @map("submission_id")
+  assignmentId BigInt         @map("assignment_id")
+  reviewerId   BigInt         @map("reviewer_id")
+  decision     ReviewDecision
+  reason       String?        @db.VarChar(200) // 驳回/代验收必填
+  isProxy      Boolean        @default(false) @map("is_proxy")
+  createdAt    DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+
+  submission Submission     @relation(fields: [submissionId], references: [id])
+  assignment TaskAssignment @relation(fields: [assignmentId], references: [id])
+  reviewer   User           @relation("ReviewerReviews", fields: [reviewerId], references: [id])
+
+  @@index([assignmentId, id])
+  @@map("reviews")
+}
+
+model Comment {
+  id        BigInt    @id @default(autoincrement())
+  taskId    BigInt    @map("task_id")
+  authorId  BigInt    @map("author_id")
+  parentId  BigInt?   @map("parent_id") // 支持一层回复
+  content   String    @db.VarChar(500)
+  deletedAt DateTime? @map("deleted_at") // 管理员软删除，保留审计
+  deletedBy BigInt?   @map("deleted_by")
+  createdAt DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  task    Task      @relation(fields: [taskId], references: [id])
+  author  User      @relation("CommentAuthor", fields: [authorId], references: [id])
+  parent  Comment?  @relation("CommentThread", fields: [parentId], references: [id])
+  replies Comment[] @relation("CommentThread")
+
+  @@index([taskId, id])
+  @@map("comments")
+}
+
+// ---------- 积分账本 ----------
+
+enum AccountOwnerType {
+  POOL
+  TASK_ESCROW
+  USER
+  SYS_ISSUE
+  SYS_CASHOUT
+}
+
+/// account_key：POOL / TASK:{taskId} / USER:{userId} / SYS_ISSUE / SYS_CASHOUT
+/// SYS_ISSUE.balance 恒为负（发行总量相反数），是唯一允许负余额的账户（PRD §9.2）
+model PointAccount {
+  id        BigInt           @id @default(autoincrement())
+  accountKey String          @unique @map("account_key") @db.VarChar(64)
+  ownerType AccountOwnerType @map("owner_type")
+  ownerId   BigInt?          @map("owner_id") // POOL / SYS 时为 NULL
+  balance   Int              @default(0) // AVAILABLE 桶
+  frozen    Int              @default(0) // 提现冻结，仅 USER 使用
+  totalIn   Int              @default(0) @map("total_in")
+  totalOut  Int              @default(0) @map("total_out")
+  createdAt DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime         @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  legs PointLeg[]
+
+  @@map("point_accounts")
+}
+
+enum TransactionType {
+  POOL_TOPUP
+  POOL_ADJUST_DOWN
+  ADMIN_GRANT
+  ADMIN_DEDUCT
+  TASK_FREEZE
+  TASK_PAYOUT
+  TASK_REPRICE_TOPUP
+  TASK_ARBITRATION
+  TASK_BONUS
+  TASK_REFUND
+  VIOLATION_DEDUCT
+  DEBT_OFFSET
+  WITHDRAW_FREEZE
+  WITHDRAW_REFUND
+  WITHDRAW_PAID
+  ARBITRATION_PAY
+}
+
+/// 交易头：biz_key 全局唯一（幂等），如 TASK_PAYOUT:assignment:88（PRD §9.2.1）
+model PointTransaction {
+  id           BigInt          @id @default(autoincrement())
+  type         TransactionType
+  bizKey       String          @unique @map("biz_key") @db.VarChar(128)
+  taskId       BigInt?         @map("task_id")
+  assignmentId BigInt?         @map("assignment_id")
+  withdrawalId BigInt?         @map("withdrawal_id")
+  disputeId    BigInt?         @map("dispute_id")
+  operatorId   BigInt?         @map("operator_id") // 系统任务为 NULL
+  reason       String?         @db.VarChar(255)
+  requestId    String?         @db.VarChar(64)
+  createdAt    DateTime        @default(now()) @map("created_at") @db.DateTime(3)
+
+  legs PointLeg[]
+
+  @@index([type, createdAt])
+  @@index([taskId])
+  @@index([createdAt])
+  @@map("point_transactions")
+}
+
+enum LedgerBucket {
+  AVAILABLE
+  FROZEN
+}
+
+/// 分录：每笔交易至少 2 条，SUM(delta) = 0（不变式 3）
+model PointLeg {
+  id            BigInt       @id @default(autoincrement())
+  transactionId BigInt       @map("transaction_id")
+  accountId     BigInt       @map("account_id")
+  bucket        LedgerBucket
+  delta         Int // 正负均可
+  balanceAfter  Int          @map("balance_after") // 该账户该桶的余额快照
+
+  transaction PointTransaction @relation(fields: [transactionId], references: [id])
+  account     PointAccount     @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, bucket, id]) // 余额必须按 id 顺序重放（PRD §9.3 不变式 4）
+  @@index([transactionId])
+  @@map("point_legs")
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+  WITHDRAWN
+}
+
+model Withdrawal {
+  id           BigInt           @id @default(autoincrement())
+  studentId    BigInt           @map("student_id")
+  points       Int
+  cashAmount   Decimal          @map("cash_amount") @db.Decimal(10, 2) // 按汇率快照
+  rate         Decimal          @db.Decimal(10, 4) // 申请时汇率快照
+  periodKey    String           @map("period_key") @db.Char(7) // YYYY-MM，按申请月占额
+  status       WithdrawalStatus @default(PENDING)
+  appliedAt    DateTime         @default(now()) @map("applied_at") @db.DateTime(3)
+  reviewedAt   DateTime?        @map("reviewed_at") @db.DateTime(3)
+  paidAt       DateTime?        @map("paid_at") @db.DateTime(3)
+  reviewedBy   BigInt?          @map("reviewed_by")
+  paidBy       BigInt?          @map("paid_by")
+  rejectReason String?          @map("reject_reason") @db.VarChar(255)
+  payNote      String?          @map("pay_note") @db.VarChar(255)
+  freezeTxId   BigInt?          @map("freeze_tx_id")
+  payoutTxId   BigInt?          @map("payout_tx_id")
+  version      Int              @default(0)
+
+  student User @relation("WithdrawalStudent", fields: [studentId], references: [id])
+
+  @@index([studentId, status, periodKey])
+  // 以下唯一键在 migration SQL 中补建（依赖生成列 active_flag）：
+  // UNIQUE KEY uk_active_withdrawal (student_id, active_flag)
+  @@map("withdrawals")
+}
+
+// ---------- 纠纷 ----------
+
+enum DisputeInitiatorRole {
+  STUDENT
+  TEACHER
+}
+
+enum DisputeStatus {
+  OPEN
+  RESOLVED
+  REJECTED
+}
+
+enum DisputeDecision {
+  PAY_FULL
+  PAY_PARTIAL
+  REJECT
+}
+
+model Dispute {
+  id             BigInt                @id @default(autoincrement())
+  taskId         BigInt?               @map("task_id")
+  assignmentId   BigInt?               @map("assignment_id")
+  initiatorId    BigInt                @map("initiator_id")
+  initiatorRole  DisputeInitiatorRole  @map("initiator_role")
+  respondentId   BigInt                @map("respondent_id")
+  reason         String                @db.Text
+  status         DisputeStatus         @default(OPEN)
+  decision       DisputeDecision?
+  payPoints      Int?                  @map("pay_points") // 部分发放的具体积分
+  resolutionNote String?               @map("resolution_note") @db.Text
+  resolutionTxId BigInt?               @map("resolution_tx_id")
+  resolvedBy     BigInt?               @map("resolved_by")
+  resolvedAt     DateTime?             @map("resolved_at") @db.DateTime(3)
+  createdAt      DateTime              @default(now()) @map("created_at") @db.DateTime(3)
+
+  initiator User             @relation("DisputeInitiator", fields: [initiatorId], references: [id])
+  respondent User            @relation("DisputeRespondent", fields: [respondentId], references: [id])
+  evidence  DisputeEvidence[]
+
+  @@index([status, createdAt])
+  @@index([taskId])
+  @@map("disputes")
+}
+
+model DisputeEvidence {
+  id          BigInt   @id @default(autoincrement())
+  disputeId   BigInt   @map("dispute_id")
+  uploaderId  BigInt   @map("uploader_id")
+  fileId      BigInt?  @map("file_id")
+  description String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  dispute   Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  uploader  User    @relation(fields: [uploaderId], references: [id])
+  file      File?   @relation(fields: [fileId], references: [id])
+
+  @@index([disputeId])
+  @@map("dispute_evidence")
+}
+
+// ---------- 通知 / 公告 / 举报 ----------
+
+model Notification {
+  id        BigInt    @id @default(autoincrement())
+  userId    BigInt    @map("user_id")
+  type      String    @db.VarChar(32)
+  title     String    @db.VarChar(255)
+  body      String    @db.Text
+  payload   Json? // 跳转参数
+  readAt    DateTime? @map("read_at") @db.DateTime(3)
+  dedupeKey String    @unique @map("dedupe_key") @db.VarChar(128)
+  createdAt DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  PUBLISHED
+  OFFLINE
+}
+
+model Announcement {
+  id          BigInt             @id @default(autoincrement())
+  title       String             @db.VarChar(100)
+  content     String             @db.Text
+  status      AnnouncementStatus @default(DRAFT)
+  publishedAt DateTime?          @map("published_at") @db.DateTime(3)
+  createdBy   BigInt             @map("created_by")
+  createdAt   DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime           @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  author User @relation("AnnouncementAuthor", fields: [createdBy], references: [id])
+
+  @@map("announcements")
+}
+
+enum ReportTargetType {
+  TASK
+  COMMENT
+}
+
+enum ReportStatus {
+  OPEN
+  HANDLED
+  DISMISSED
+}
+
+model Report {
+  id         BigInt           @id @default(autoincrement())
+  reporterId BigInt           @map("reporter_id")
+  targetType ReportTargetType @map("target_type")
+  targetId   BigInt           @map("target_id")
+  reason     String           @db.VarChar(500)
+  status     ReportStatus     @default(OPEN)
+  handledBy  BigInt?          @map("handled_by")
+  handledAt  DateTime?        @map("handled_at") @db.DateTime(3)
+  handleNote String?          @map("handle_note") @db.VarChar(255)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+
+  reporter User @relation("ReportReporter", fields: [reporterId], references: [id])
+
+  @@index([status, createdAt])
+  @@map("reports")
+}
+
+// ---------- 结算 ----------
+
+enum SettlementBatchStatus {
+  RUNNING
+  DONE
+  FAILED
+}
+
+/// 一个任务只能有一个结算批次（taskId 唯一，幂等守卫）
+model SettlementBatch {
+  id            BigInt                @id @default(autoincrement())
+  taskId        BigInt                @unique @map("task_id")
+  status        SettlementBatchStatus @default(RUNNING)
+  acceptedCount Int                   @default(0) @map("accepted_count")
+  baseAmount    Int                   @default(0) @map("base_amount")
+  bonusAmount   Int                   @default(0) @map("bonus_amount")
+  refundAmount  Int                   @default(0) @map("refund_amount")
+  startedAt     DateTime              @default(now()) @map("started_at") @db.DateTime(3)
+  finishedAt    DateTime?             @map("finished_at") @db.DateTime(3)
+  error         String?               @db.VarChar(500)
+
+  task        Task             @relation(fields: [taskId], references: [id])
+  settlements TaskSettlement[]
+
+  @@map("settlement_batches")
+}
+
+enum SettlementKind {
+  BASE
+  BONUS
+  REFUND
+}
+
+/// 结算快照，供审计复现（PRD §5.2 规则 5）
+model TaskSettlement {
+  id            BigInt         @id @default(autoincrement())
+  batchId       BigInt         @map("batch_id")
+  taskId        BigInt         @map("task_id")
+  assignmentId  BigInt?        @map("assignment_id") // REFUND 行为 NULL
+  kind          SettlementKind
+  amount        Int
+  remainderRank Int?           @map("remainder_rank") // 余数分配顺序，0 表示不参与
+  createdAt     DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+
+  batch      SettlementBatch  @relation(fields: [batchId], references: [id])
+  task       Task             @relation(fields: [taskId], references: [id])
+  assignment TaskAssignment?  @relation(fields: [assignmentId], references: [id])
+
+  @@index([taskId, batchId])
+  @@map("task_settlements")
+}
+
+// ---------- 文件 ----------
+
+enum FileVisibility {
+  TASK_PUBLIC
+  TASK_PARTICIPANT
+  SUBMISSION_OWNER
+  DISPUTE_PARTY
+  ADMIN_ONLY
+}
+
+enum ScanStatus {
+  PENDING
+  CLEAN
+  FAILED
+}
+
+/// 统一文件元数据；实体存 Web 根目录之外，下载走 /files/:id 鉴权（PRD §11.2）
+model File {
+  id           BigInt         @id @default(autoincrement())
+  storageKey   String         @unique @map("storage_key") @db.VarChar(255)
+  originalName String         @map("original_name") @db.VarChar(255)
+  mime         String         @db.VarChar(128)
+  sizeBytes    BigInt         @map("size_bytes")
+  sha256       String         @db.Char(64)
+  uploaderId   BigInt         @map("uploader_id")
+  visibility   FileVisibility
+  refType      String?        @map("ref_type") @db.VarChar(32)
+  refId        BigInt?        @map("ref_id")
+  scanStatus   ScanStatus     @default(PENDING) @map("scan_status")
+  createdAt    DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+
+  uploader        User              @relation("FileUploader", fields: [uploaderId], references: [id])
+  taskAttachments TaskAttachment[]
+  submissionFiles SubmissionFile[]
+  disputeEvidence DisputeEvidence[]
+
+  @@index([refType, refId])
+  @@map("files")
+}
+
+// ---------- 系统配置 / 审计 / 运维 ----------
+
+enum ConfigValueType {
+  INT
+  DECIMAL
+  JSON
+  STRING
+  ENUM
+}
+
+model SystemConfig {
+  id          BigInt          @id @default(autoincrement())
+  key         String          @unique @db.VarChar(64)
+  valueType   ConfigValueType @map("value_type")
+  value       String          @db.VarChar(255) // 按 valueType 解析（如 "[24,72]"、"0.0000"）
+  description String?         @db.VarChar(255)
+  updatedBy   BigInt?         @map("updated_by")
+  updatedAt   DateTime        @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  createdAt   DateTime        @default(now()) @map("created_at") @db.DateTime(3)
+
+  updater User? @relation("ConfigUpdater", fields: [updatedBy], references: [id])
+
+  @@map("system_configs")
+}
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  actorId    BigInt   @map("actor_id")
+  actorRole  Role     @map("actor_role")
+  action     String   @db.VarChar(64) // 如 TASK_OFFLINE
+  targetType String   @map("target_type") @db.VarChar(32)
+  targetId   BigInt?  @map("target_id")
+  before     Json?
+  after      Json?
+  reason     String?  @db.VarChar(255)
+  ip         String?  @db.VarChar(64)
+  userAgent  String?  @map("user_agent") @db.VarChar(255)
+  requestId  String?  @map("request_id") @db.VarChar(64)
+  createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  actor User @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([action, createdAt])
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+  @@map("audit_logs")
+}
+
+enum JobRunStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+model JobRun {
+  id         BigInt       @id @default(autoincrement())
+  jobName    String       @map("job_name") @db.VarChar(64)
+  status     JobRunStatus @default(RUNNING)
+  startedAt  DateTime     @default(now()) @map("started_at") @db.DateTime(3)
+  finishedAt DateTime?    @map("finished_at") @db.DateTime(3)
+  error      String?      @db.VarChar(500)
+  meta       Json?
+
+  @@index([jobName, startedAt])
+  @@map("job_runs")
+}
+
+/// 兜底 DB 锁（主用 MySQL GET_LOCK，本表用于跨重启排查）
+model JobLock {
+  name      String    @id @db.VarChar(64)
+  holder    String?   @db.VarChar(128)
+  lockedAt  DateTime? @map("locked_at") @db.DateTime(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@map("job_locks")
+}
+
+enum OutboxChannel {
+  EMAIL
+  IN_APP
+}
+
+enum OutboxStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+/// 通知/邮件异步发送（不在主事务里，PRD §9.4）；失败重试 3 次
+model Outbox {
+  id          BigInt        @id @default(autoincrement())
+  channel     OutboxChannel
+  recipient   String        @db.VarChar(128)
+  subject     String?       @db.VarChar(255)
+  body        String?       @db.Text
+  payload     Json? // 站内信时的通知内容
+  status      OutboxStatus  @default(PENDING)
+  attempts    Int           @default(0)
+  nextRetryAt DateTime?     @map("next_retry_at") @db.DateTime(3)
+  sentAt      DateTime?     @map("sent_at") @db.DateTime(3)
+  lastError   String?       @map("last_error") @db.VarChar(500)
+  dedupeKey   String?       @map("dedupe_key") @db.VarChar(128)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([status, nextRetryAt])
+  @@index([dedupeKey])
+  @@map("outbox")
+}
+
+/// 幂等键落库，7 天过期（PRD §12.1）
+model IdempotencyKey {
+  id             BigInt   @id @default(autoincrement())
+  idempotencyKey String   @map("key") @db.VarChar(128)
+  userId         BigInt   @map("user_id")
+  route          String   @db.VarChar(128)
+  statusCode     Int?     @map("status_code")
+  responseBody   Json?    @map("response_body")
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  expiresAt      DateTime @map("expires_at") @db.DateTime(3)
+
+  @@unique([idempotencyKey, userId, route])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}

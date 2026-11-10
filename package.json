@@ -1,0 +1,30 @@
+{
+  "name": "sasu-task-system",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.21.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm --filter @sasu/shared build && pnpm --filter !@sasu/shared build",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm --filter @sasu/shared build && pnpm --filter !@sasu/shared typecheck",
+    "test": "pnpm -r test",
+    "test:e2e": "echo \"[M0] E2E (Playwright, PRD §15.1) lands in M6\"",
+    "db:migrate": "pnpm --filter @sasu/api db:migrate",
+    "db:seed": "pnpm --filter @sasu/api db:seed"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.14.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-vue": "10.12.1",
+    "prettier": "3.9.10",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.2"
+  }
+}

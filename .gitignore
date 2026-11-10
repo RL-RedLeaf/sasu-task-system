@@ -135,6 +135,16 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
+# Prisma 生成客户端（postinstall / build 前由 `prisma generate` 产出，不入库）
+apps/api/src/generated/
+
+# Vite 自动生成声明
+apps/web/auto-imports.d.ts
+apps/web/components.d.ts
+
+# 上传与备份挂载目录（本地开发）
+/data
+
 # Docs (local-only, not committed)
 docs/
 

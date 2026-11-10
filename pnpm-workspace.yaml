@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+# 官方工具链的原生安装脚本（prisma 引擎下载、esbuild 二进制、nest watch 文件监听）
+allowBuilds:
+  '@parcel/watcher': true
+  '@prisma/engines': true
+  esbuild: true
+  prisma: true
+minimumReleaseAgeExclude:
+  - eslint-plugin-vue@10.12.1

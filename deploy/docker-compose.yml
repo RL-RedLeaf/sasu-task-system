@@ -1,0 +1,83 @@
+# SASU 校园任务平台 · 编排（PRD §12.1）
+# 用法：仓库根准备 .env（见 .env.example），然后 docker compose -f deploy/docker-compose.yml up -d
+# 仅暴露 web:80；api / mysql 只在内网。
+
+name: sasu-task-system
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: web
+    ports:
+      - '80:80'
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: api
+    env_file:
+      - ../.env
+    environment:
+      TZ: Asia/Shanghai
+      DATABASE_URL: mysql://${MYSQL_USER:-sasu}:${MYSQL_PASSWORD:?MYSQL_PASSWORD required}@mysql:3306/${MYSQL_DATABASE:-sasu}
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-sasu}
+      MYSQL_USER: ${MYSQL_USER:-sasu}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD required}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-proot']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  backup:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-sasu}
+      TZ: Asia/Shanghai
+    volumes:
+      - backup:/backup
+      - ./backup.sh:/scripts/backup.sh:ro
+    entrypoint:
+      - sh
+      - -c
+      - |
+        while true; do
+          sh /scripts/backup.sh || echo "backup failed" >&2
+          sleep 86400
+        done
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  uploads:
+  backup:

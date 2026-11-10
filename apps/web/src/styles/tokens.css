@@ -1,0 +1,65 @@
+/**
+ * 设计令牌 + Element Plus 主题覆盖（PRD §13.2/§13.3/§13.4）。
+ * 通过 CSS 变量覆盖主题，不引 SCSS 全量编译；main.ts 必须最先挂载本文件。
+ * 文案基调：界面主词用「任务 / 积分 / 验收」，不用「悬赏 / 赏金」（§13.5）。
+ */
+:root {
+  /* 品牌色 */
+  --sasu-color-primary: #b4232a;
+  --sasu-color-primary-hover: #8f1b21;
+  --sasu-color-primary-light-bg: #fbeeef;
+  --sasu-color-secondary: #1f4e79;
+  --sasu-color-secondary-bg: #edf3f9;
+  --sasu-color-success: #2e7d5b;
+  --sasu-color-warning: #c77700;
+  --sasu-color-danger: #c0392b;
+  --sasu-text-primary: #1f2329;
+  --sasu-text-secondary: #5c6670;
+  --sasu-border: #e5e8eb;
+  --sasu-bg-page: #f7f8fa;
+  --sasu-bg-card: #ffffff;
+  --sasu-radius-base: 8px;
+  --sasu-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.06);
+
+  /* Element Plus 变量覆盖（light-3/5/7/8 由主色 #B4232A 向白色插值生成） */
+  --el-color-primary: var(--sasu-color-primary);
+  --el-color-primary-dark-2: var(--sasu-color-primary-hover);
+  --el-color-primary-light-3: #ca656a;
+  --el-color-primary-light-5: #da9195;
+  --el-color-primary-light-7: #e8bdbf;
+  --el-color-primary-light-8: #f0d3d4;
+  --el-color-primary-light-9: var(--sasu-color-primary-light-bg);
+  --el-color-success: var(--sasu-color-success);
+  --el-color-warning: var(--sasu-color-warning);
+  --el-color-danger: var(--sasu-color-danger);
+  --el-color-error: var(--sasu-color-danger);
+  --el-border-radius-base: var(--sasu-radius-base);
+  --el-font-size-base: 14px;
+  --el-text-color-primary: var(--sasu-text-primary);
+  --el-text-color-regular: var(--sasu-text-secondary);
+  --el-border-color: var(--sasu-border);
+  --el-bg-color-page: var(--sasu-bg-page);
+  --el-box-shadow-light: var(--sasu-shadow-card);
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--sasu-text-primary);
+  background: var(--sasu-bg-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 积分、金额等数字用等宽数字（§13.3） */
+.num,
+.el-table .cell.num {
+  font-variant-numeric: tabular-nums;
+}
