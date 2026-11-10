@@ -78,7 +78,7 @@ export class ReconcileService {
        FROM point_legs GROUP BY account_id, bucket`,
     );
     const sumMap = new Map<string, { s: number }>();
-    for (const r of legSums) sumMap.set(`${r.account_id}:${r.bucket}`, { s: r.s });
+    for (const r of legSums) sumMap.set(`${r.account_id}:${r.bucket}`, { s: Number(r.s) }); // SUM() → BIGINT/BigInt
     for (const a of accounts) {
       const avail = sumMap.get(`${a.id}:AVAILABLE`)?.s ?? 0;
       const froz = sumMap.get(`${a.id}:FROZEN`)?.s ?? 0;
@@ -152,7 +152,7 @@ export class ReconcileService {
          AND l.account_id IN (SELECT id FROM point_accounts WHERE owner_type='USER')`,
     );
     const deductedAgg = await tx.taskAssignment.aggregate({ _sum: { violationDeducted: true } });
-    if ((deductSum[0]?.s ?? 0) !== (deductedAgg._sum.violationDeducted ?? 0)) {
+    if (Number(deductSum[0]?.s ?? 0) !== (deductedAgg._sum.violationDeducted ?? 0)) {
       push(8, `违约扣款流水 ${deductSum[0]?.s ?? 0} ≠ Σ violation_deducted ${deductedAgg._sum.violationDeducted ?? 0}`);
     }
 

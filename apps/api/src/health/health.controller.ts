@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { Response } from 'express';
 import { HealthzResponse } from '@sasu/shared';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { Public } from '../common/guards/public.decorator';
 
 let cachedVersion: string | null = null;
 
@@ -26,6 +27,7 @@ function getAppVersion(): string {
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 
+  @Public()
   @Get('healthz')
   async healthz(@Res() res: Response): Promise<void> {
     let db = true;

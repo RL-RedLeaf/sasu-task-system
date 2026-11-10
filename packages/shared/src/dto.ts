@@ -1,4 +1,4 @@
-import type { ApiErrorBody } from './errors';
+import type { ApiErrorBody } from './errors.js';
 
 /** 统一响应信封：业务成功时 code = 0 */
 export interface ApiResponse<T> extends ApiErrorBody {

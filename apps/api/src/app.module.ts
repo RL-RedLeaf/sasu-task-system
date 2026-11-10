@@ -19,6 +19,7 @@ import { DisputesModule } from './disputes/disputes.module';
 import { CommunityModule } from './community/community.module';
 import { StatsModule } from './stats/stats.module';
 import { JobsModule } from './jobs/jobs.module';
+import { AuditQueryModule } from './audit/audit-query.module';
 
 /**
  * M0 脚手架 + M1 账号/认证/分类/配置。
@@ -43,6 +44,7 @@ import { JobsModule } from './jobs/jobs.module';
     CommunityModule,
     StatsModule,
     JobsModule,
+    AuditQueryModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },
