@@ -166,7 +166,7 @@ async function submitResolve(): Promise<void> {
       :loading="loading"
       :pagination="false"
       row-key="id"
-      :scroll="{ x: 950 }"
+      :scroll="{ x: 940 }"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'initiator'">{{ record.initiator?.name ?? record.initiatorId }}</template>

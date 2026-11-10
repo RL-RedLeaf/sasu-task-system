@@ -19,16 +19,16 @@ function fmtTime(value: string): string {
 }
 
 const columns: TableColumnsType = [
-  { title: '学生', key: 'student', width: 110 },
-  { title: '学号', key: 'username', width: 130 },
-  { title: '班级', key: 'className', width: 130 },
-  { title: '积分', key: 'points', width: 100, align: 'right' },
-  { title: '现金', key: 'cash', width: 110, align: 'right' },
-  { title: '汇率', dataIndex: 'rate', key: 'rate', width: 100, align: 'right' },
-  { title: '申请月', dataIndex: 'periodKey', key: 'periodKey', width: 100, align: 'center' },
-  { title: '申请时间', key: 'appliedAt', width: 170 },
-  { title: '状态', key: 'status', width: 90 },
-  { title: '操作', key: 'action', width: 180, fixed: 'right' },
+  { title: '学生', key: 'student', width: 100 },
+  { title: '学号', key: 'username', width: 120 },
+  { title: '班级', key: 'className', width: 120 },
+  { title: '积分', key: 'points', width: 90, align: 'right' },
+  { title: '现金', key: 'cash', width: 100, align: 'right' },
+  { title: '汇率', dataIndex: 'rate', key: 'rate', width: 90, align: 'right' },
+  { title: '申请月', dataIndex: 'periodKey', key: 'periodKey', width: 90, align: 'center' },
+  { title: '申请时间', key: 'appliedAt', width: 160 },
+  { title: '状态', key: 'status', width: 80 },
+  { title: '操作', key: 'action', width: 170, fixed: 'right' },
 ];
 
 const TABS = [
@@ -141,7 +141,7 @@ async function markPaid(row: WithdrawalRow): Promise<void> {
       :loading="loading"
       :pagination="false"
       row-key="id"
-      :scroll="{ x: 1250 }"
+      :scroll="{ x: 1020 }"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'student'">{{ record.student?.name ?? '—' }}</template>

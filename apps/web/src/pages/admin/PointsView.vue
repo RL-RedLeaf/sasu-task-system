@@ -174,7 +174,7 @@ async function queryUser(page?: number): Promise<void> {
 }
 
 // ---------- 全量流水 ----------
-const allTxs = reactive({ page: 1, pageSize: 20, type: '' });
+const allTxs = reactive({ page: 1, pageSize: 20, type: undefined as string | undefined });
 const allLoading = ref(false);
 const allItems = ref<TxRow[]>([]);
 const allTotal = ref(0);

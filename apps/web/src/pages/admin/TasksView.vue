@@ -25,14 +25,14 @@ const router = useRouter();
 
 const columns: TableColumnsType = [
   { title: '标题', key: 'title' },
-  { title: '教师', key: 'teacher', width: 110 },
-  { title: '分类', key: 'category', width: 110 },
+  { title: '教师', key: 'teacher', width: 100 },
+  { title: '分类', key: 'category', width: 100 },
   { title: '状态', key: 'status', width: 90 },
-  { title: '赏金（单人）', key: 'reward', width: 120, align: 'right' },
-  { title: '名额', key: 'quota', width: 100, align: 'center' },
-  { title: '截止时间', key: 'deadlineAt', width: 170 },
-  { title: '创建时间', key: 'createdAt', width: 170 },
-  { title: '操作', key: 'action', width: 260, fixed: 'right' },
+  { title: '赏金（单人）', key: 'reward', width: 110, align: 'right' },
+  { title: '名额', key: 'quota', width: 90, align: 'center' },
+  { title: '截止时间', key: 'deadlineAt', width: 160 },
+  { title: '创建时间', key: 'createdAt', width: 160 },
+  { title: '操作', key: 'action', width: 240, fixed: 'right' },
 ];
 
 const passedColumns: TableColumnsType = [
@@ -260,7 +260,7 @@ async function openPreview(row: TaskSummary): Promise<void> {
       :loading="loading"
       :pagination="false"
       row-key="id"
-      :scroll="{ x: 1200 }"
+      :scroll="{ x: 1050 }"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'title'">

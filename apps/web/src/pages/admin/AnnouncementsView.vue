@@ -126,7 +126,7 @@ async function remove(row: AnnouncementRow): Promise<void> {
       :loading="loading"
       :pagination="false"
       row-key="id"
-      :scroll="{ x: 1000 }"
+      :scroll="{ x: 960 }"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'status'"><StatusTag :status="statusLabels[record.status as string] ?? record.status" /></template>

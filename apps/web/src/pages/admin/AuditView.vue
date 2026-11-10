@@ -39,7 +39,7 @@ const items = ref<AuditRow[]>([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = ref(20);
-const filters = reactive({ action: '', actorRole: '' });
+const filters = reactive({ action: '', actorRole: undefined as string | undefined });
 
 const roleOptions = [
   { label: '学生', value: 'STUDENT' },
@@ -102,7 +102,7 @@ onMounted(() => void load());
       :loading="loading"
       :pagination="false"
       row-key="id"
-      :scroll="{ x: 1100 }"
+      :scroll="{ x: 960 }"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'createdAt'">{{ fmtTime(record.createdAt) }}</template>

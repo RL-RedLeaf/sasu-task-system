@@ -27,6 +27,9 @@ const MAP: Record<string, { label: string; color: 'red' | 'success' | 'warning' 
   OPEN: { label: '进行中', color: 'red' },
   RESOLVED: { label: '已裁定', color: 'success' },
   REJECTED_D: { label: '已驳回', color: 'default' },
+  // 账号状态（原 EP 直接展示英文原值，此处补中文映射）
+  ACTIVE: { label: '正常', color: 'success' },
+  DISABLED: { label: '已禁用', color: 'error' },
 };
 
 const info = computed(() => MAP[props.status] ?? { label: props.status, color: 'default' as const });

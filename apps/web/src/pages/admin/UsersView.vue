@@ -31,15 +31,15 @@ async function copyText(text: string): Promise<void> {
 const roleLabels: Record<string, string> = { STUDENT: '学生', TEACHER: '教师', ADMIN: '管理员' };
 
 const columns: TableColumnsType = [
-  { title: '学号 / 工号', dataIndex: 'username', key: 'username', width: 140 },
+  { title: '学号 / 工号', dataIndex: 'username', key: 'username', width: 130 },
   { title: '姓名', dataIndex: 'name', key: 'name', width: 110 },
   { title: '角色', key: 'role', width: 90 },
-  { title: '班级', key: 'className', width: 120 },
-  { title: '状态', key: 'status', width: 90 },
-  { title: '违约次数', dataIndex: 'violationCount', key: 'violationCount', width: 90, align: 'center' },
-  { title: '欠分', dataIndex: 'penaltyDebt', key: 'penaltyDebt', width: 90, align: 'center' },
-  { title: '最后登录', key: 'lastLoginAt', width: 170 },
-  { title: '操作', key: 'action', width: 240, fixed: 'right' },
+  { title: '班级', key: 'className', width: 110 },
+  { title: '状态', key: 'status', width: 80 },
+  { title: '违约次数', dataIndex: 'violationCount', key: 'violationCount', width: 80, align: 'center' },
+  { title: '欠分', dataIndex: 'penaltyDebt', key: 'penaltyDebt', width: 80, align: 'center' },
+  { title: '最后登录', key: 'lastLoginAt', width: 160 },
+  { title: '操作', key: 'action', width: 210, fixed: 'right' },
 ];
 
 const pwdColumns: TableColumnsType = [
@@ -59,7 +59,8 @@ const items = ref<UserRow[]>([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = ref(20);
-const filters = reactive({ keyword: '', role: '', status: '' });
+// role/status 用 undefined 而非 ''：a-select 只有在 value 为 undefined 时才显示 placeholder
+const filters = reactive({ keyword: '', role: undefined as string | undefined, status: undefined as string | undefined });
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -342,7 +343,7 @@ async function copyAllPasswords(): Promise<void> {
       :loading="loading"
       :pagination="false"
       row-key="id"
-      :scroll="{ x: 1100 }"
+      :scroll="{ x: 1050 }"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'role'">{{ roleLabels[record.role as string] ?? record.role }}</template>

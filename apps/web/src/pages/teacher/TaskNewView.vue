@@ -27,7 +27,8 @@ const form = reactive({
   location: '',
   contactInfo: '',
   headcount: 1,
-  deadlineAt: null as Dayjs | null,
+  // a-date-picker 的 value 类型为 string | Dayjs | undefined：用 undefined 而非 null
+  deadlineAt: undefined as Dayjs | undefined,
 });
 
 const rules: Record<string, Rule[]> = {
@@ -47,7 +48,7 @@ const rules: Record<string, Rule[]> = {
   deadlineAt: [
     { required: true, message: '请选择截止时间', trigger: 'change' },
     {
-      validator: (_r, value: Dayjs | null, cb) => {
+      validator: (_r, value: Dayjs | undefined, cb) => {
         if (!value) {
           cb();
           return;

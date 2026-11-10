@@ -110,7 +110,8 @@ const editForm = reactive({
   location: '',
   contactInfo: '',
   headcount: 1,
-  deadlineAt: null as Dayjs | null,
+  // a-date-picker 的 value 类型为 string | Dayjs | undefined：用 undefined 而非 null
+  deadlineAt: undefined as Dayjs | undefined,
 });
 
 const editRules = computed<Record<string, Rule[]>>(() => ({
@@ -127,7 +128,7 @@ const editRules = computed<Record<string, Rule[]>>(() => ({
   deadlineAt: [
     { required: true, message: '请选择截止时间', trigger: 'change' },
     {
-      validator: (_r, value: Dayjs | null, cb) => {
+      validator: (_r, value: Dayjs | undefined, cb) => {
         if (!value) {
           cb();
           return;
@@ -401,7 +402,7 @@ onBeforeUnmount(() => {
       <!-- ② 接单学生 -->
       <a-card class="block" title="接单学生与验收">
         <div v-if="assignments.length > 0">
-          <a-table :columns="assignmentColumns" :data-source="assignments" :pagination="false" row-key="id" :scroll="{ x: 900 }">
+          <a-table :columns="assignmentColumns" :data-source="assignments" :pagination="false" row-key="id" :scroll="{ x: 980 }">
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'student'">{{ record.student?.name ?? '—' }}</template>
               <template v-else-if="column.key === 'className'">{{ record.student?.className || '—' }}</template>
