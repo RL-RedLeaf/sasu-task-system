@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useAuthStore } from '@/stores/auth';
 import { useNotificationStore } from '@/stores/notification';
-import type { Role } from '@sasu/shared';
+
 
 const auth = useAuthStore();
 const notify = useNotificationStore();

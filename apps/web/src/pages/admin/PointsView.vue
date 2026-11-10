@@ -1,4 +1,8 @@
 <script setup lang="ts">
+function newIdemKey(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 import { onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
@@ -85,7 +89,7 @@ async function submitTopup(): Promise<void> {
   }
   topupLoading.value = true;
   try {
-    await pointsApi.topup(topupForm.amount, topupForm.reason.trim(), crypto.randomUUID());
+    await pointsApi.topup(topupForm.amount, topupForm.reason.trim(), newIdemKey());
     ElMessage.success(`充值成功，积分池 +${topupForm.amount} 分`);
     topupFormRef.value?.resetFields();
     void loadPool();
@@ -113,7 +117,7 @@ async function submitAdjust(): Promise<void> {
   }
   adjustLoading.value = true;
   try {
-    await pointsApi.adjust(adjustForm.amount, adjustForm.reason.trim(), crypto.randomUUID());
+    await pointsApi.adjust(adjustForm.amount, adjustForm.reason.trim(), newIdemKey());
     ElMessage.success(`调整成功，积分池 ${adjustForm.amount > 0 ? '+' : ''}${adjustForm.amount} 分`);
     adjustFormRef.value?.resetFields();
     void loadPool();
@@ -231,7 +235,7 @@ async function confirmUserAdjust(): Promise<void> {
       inputPlaceholder: '如：纠错补偿、活动奖励',
       inputValidator: (v: string) => (v && v.trim() ? true : '原因不能为空'),
     });
-    await pointsApi.adjustUser(id, amount, reason.trim(), crypto.randomUUID());
+    await pointsApi.adjustUser(id, amount, reason.trim(), newIdemKey());
     ElMessage.success('调整成功');
     if (userQueried.value) void queryUser();
   } catch (e) {
