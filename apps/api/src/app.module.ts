@@ -12,6 +12,7 @@ import { UsersModule } from './users/users.module';
 import { CategoriesModule } from './categories/categories.module';
 import { SettingsModule } from './settings.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PointsModule } from './points/points.module';
 
 /**
  * M0 脚手架 + M1 账号/认证/分类/配置。
@@ -29,6 +30,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     CategoriesModule,
     SettingsModule,
     NotificationsModule,
+    PointsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },

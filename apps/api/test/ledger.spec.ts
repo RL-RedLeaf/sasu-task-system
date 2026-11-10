@@ -1,35 +1,36 @@
 import { LedgerService } from '../src/ledger/ledger.service';
+import type { AccountOwnerType } from '@sasu/shared';
 
-describe('LedgerService（记账唯一入口）', () => {
+/** 单元级：余额不变式（入账主流程依赖数据库，由验收脚本覆盖） */
+describe('LedgerService 余额不变式（PRD §9.3 不变式 12）', () => {
   let ledger: LedgerService;
 
   beforeEach(() => {
-    ledger = new LedgerService();
+    // 仅测试纯函数，不触库
+    ledger = new LedgerService({} as never);
   });
 
-  describe('assertLegsBalanced', () => {
-    it('分录求和为 0 时通过（如 TASK_PAYOUT：托管 -100 / 用户 +100）', () => {
-      expect(() => ledger.assertLegsBalanced([-100, 100])).not.toThrow();
-      expect(() => ledger.assertLegsBalanced([50, -30, -20])).not.toThrow();
-    });
-
-    it('分录不平衡时抛错（PRD §9.3 不变式 3）', () => {
-      expect(() => ledger.assertLegsBalanced([-100, 90])).toThrow(/分录不平衡/);
-      expect(() => ledger.assertLegsBalanced([])).not.toThrow();
-    });
+  it('普通账户余额/冻结为负时抛错', () => {
+    const cases: [AccountOwnerType, number, number][] = [
+      ['USER', -1, 0],
+      ['TASK_ESCROW', 0, -5],
+      ['POOL', -100, 0],
+    ];
+    for (const [ownerType, balance, frozen] of cases) {
+      expect(() => ledger.assertBalanceInvariant(ownerType, balance, frozen)).toThrow(/不得为负/);
+    }
+    expect(() => ledger.assertBalanceInvariant('POOL', 1000, 0)).not.toThrow();
   });
 
-  describe('assertBalanceInvariant', () => {
-    it('普通账户余额/冻结为负时抛错（不变式 12）', () => {
-      expect(() => ledger.assertBalanceInvariant('USER', -1, 0)).toThrow(/不得为负/);
-      expect(() => ledger.assertBalanceInvariant('TASK_ESCROW', 0, -5)).toThrow(/不得为负/);
-      expect(() => ledger.assertBalanceInvariant('POOL', 100, 0)).not.toThrow();
-    });
+  it('SYS_ISSUE 允许负余额但冻结必须为 0 且不得为正', () => {
+    expect(() => ledger.assertBalanceInvariant('SYS_ISSUE', -1000, 0)).not.toThrow();
+    expect(() => ledger.assertBalanceInvariant('SYS_ISSUE', 10, 0)).toThrow();
+    expect(() => ledger.assertBalanceInvariant('SYS_ISSUE', -10, 1)).toThrow();
+  });
 
-    it('SYS_ISSUE 允许负余额但冻结必须为 0', () => {
-      expect(() => ledger.assertBalanceInvariant('SYS_ISSUE', -1000, 0)).not.toThrow();
-      expect(() => ledger.assertBalanceInvariant('SYS_ISSUE', 10, 0)).toThrow();
-      expect(() => ledger.assertBalanceInvariant('SYS_ISSUE', -10, 1)).toThrow();
-    });
+  it('账户键生成符合 §9.2 约定', () => {
+    expect(LedgerService.POOL).toBe('POOL');
+    expect(LedgerService.userKey(456n)).toBe('USER:456');
+    expect(LedgerService.taskKey(123n)).toBe('TASK:123');
   });
 });
