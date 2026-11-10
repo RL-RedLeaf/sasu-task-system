@@ -134,7 +134,7 @@ async function submitEdit(): Promise<void> {
         </el-table-column>
         <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button link type="primary" size="small" @click="openEdit(row as ConfigRow)">编辑</el-button>
           </template>
         </el-table-column>
         <template #empty><EmptyState /></template>

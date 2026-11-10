@@ -190,7 +190,7 @@ onMounted(() => {
                 size="small"
                 type="warning"
                 plain
-                @click="onWithdrawRecord(row)"
+                @click="onWithdrawRecord(row as WithdrawalRow)"
               >
                 撤回
               </el-button>

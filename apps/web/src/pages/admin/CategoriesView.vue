@@ -107,8 +107,8 @@ async function remove(row: CategoryRow): Promise<void> {
       <el-table-column prop="sortOrder" label="排序" width="100" align="center" />
       <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button link type="danger" size="small" @click="remove(row)">删除</el-button>
+          <el-button link type="primary" size="small" @click="openEdit(row as CategoryRow)">编辑</el-button>
+          <el-button link type="danger" size="small" @click="remove(row as CategoryRow)">删除</el-button>
         </template>
       </el-table-column>
       <template #empty><EmptyState description="还没有分类，点击右上角新建" /></template>

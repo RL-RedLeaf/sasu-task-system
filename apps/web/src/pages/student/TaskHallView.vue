@@ -151,7 +151,7 @@ onBeforeUnmount(() => {
           v-model="filters.minReward"
           :min="1"
           :max="9999"
-          controls-position="hidden"
+          :controls="false"
           placeholder="最低"
           class="w-num"
         />
@@ -160,7 +160,7 @@ onBeforeUnmount(() => {
           v-model="filters.maxReward"
           :min="1"
           :max="9999"
-          controls-position="hidden"
+          :controls="false"
           placeholder="最高"
           class="w-num"
         />

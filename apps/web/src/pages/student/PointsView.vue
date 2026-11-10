@@ -118,20 +118,20 @@ onMounted(() => {
     <div v-loading="loading" class="table-area">
       <el-table v-if="items.length > 0" :data="items">
         <el-table-column label="类型" width="140">
-          <template #default="{ row }">{{ typeText(row) }}</template>
+          <template #default="{ row }">{{ typeText(row as TxRow) }}</template>
         </el-table-column>
         <el-table-column label="原因" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">{{ row.reason || '—' }}</template>
         </el-table-column>
         <el-table-column label="变动" width="110" align="right">
           <template #default="{ row }">
-            <span :style="{ color: deltaOf(row) > 0 ? 'var(--sasu-color-success)' : deltaOf(row) < 0 ? 'var(--sasu-color-danger)' : 'var(--sasu-text-secondary)' }">
-              {{ deltaOf(row) > 0 ? '+' : '' }}{{ deltaOf(row) }}
+            <span :style="{ color: deltaOf(row as TxRow) > 0 ? 'var(--sasu-color-success)' : deltaOf(row as TxRow) < 0 ? 'var(--sasu-color-danger)' : 'var(--sasu-text-secondary)' }">
+              {{ deltaOf(row as TxRow) > 0 ? '+' : '' }}{{ deltaOf(row as TxRow) }}
             </span>
           </template>
         </el-table-column>
         <el-table-column label="余额快照" width="110" align="right">
-          <template #default="{ row }"><PointsNum :value="balanceOf(row)" /></template>
+          <template #default="{ row }"><PointsNum :value="balanceOf(row as TxRow)" /></template>
         </el-table-column>
         <el-table-column label="时间" width="170">
           <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>

@@ -270,15 +270,15 @@ async function openPreview(row: TaskSummary): Promise<void> {
       </el-table-column>
       <el-table-column label="操作" width="260" fixed="right">
         <template #default="{ row }">
-          <el-button v-if="row.status === 'PENDING_REWARD'" link type="primary" size="small" @click="openPrice(row)">定价</el-button>
-          <el-button v-if="isPricedUnsettled(row)" link type="primary" size="small" @click="openReprice(row)">改价</el-button>
-          <el-button v-if="isPricedUnsettled(row)" link size="small" @click="openPreview(row)">结算预览</el-button>
+          <el-button v-if="row.status === 'PENDING_REWARD'" link type="primary" size="small" @click="openPrice(row as TaskSummary)">定价</el-button>
+          <el-button v-if="isPricedUnsettled(row as TaskSummary)" link type="primary" size="small" @click="openReprice(row as TaskSummary)">改价</el-button>
+          <el-button v-if="isPricedUnsettled(row as TaskSummary)" link size="small" @click="openPreview(row as TaskSummary)">结算预览</el-button>
           <el-button
             v-if="row.status === 'PENDING_REWARD' || (row.status === 'CLOSED' && row.settlementStatus !== 'DONE')"
             link
             type="warning"
             size="small"
-            @click="forceAction(row, 'offline')"
+            @click="forceAction(row as TaskSummary, 'offline')"
           >
             强制下架
           </el-button>
@@ -287,7 +287,7 @@ async function openPreview(row: TaskSummary): Promise<void> {
             link
             type="danger"
             size="small"
-            @click="forceAction(row, 'cancel')"
+            @click="forceAction(row as TaskSummary, 'cancel')"
           >
             强制取消
           </el-button>

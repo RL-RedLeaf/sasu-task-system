@@ -312,10 +312,10 @@ async function copyAllPasswords(): Promise<void> {
       </el-table-column>
       <el-table-column label="操作" width="240" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button v-if="row.status === 'ACTIVE'" link type="danger" size="small" @click="disableUser(row)">禁用</el-button>
-          <el-button v-else link type="success" size="small" @click="enableUser(row)">启用</el-button>
-          <el-button link type="warning" size="small" @click="resetPassword(row)">重置密码</el-button>
+          <el-button link type="primary" size="small" @click="openEdit(row as UserRow)">编辑</el-button>
+          <el-button v-if="row.status === 'ACTIVE'" link type="danger" size="small" @click="disableUser(row as UserRow)">禁用</el-button>
+          <el-button v-else link type="success" size="small" @click="enableUser(row as UserRow)">启用</el-button>
+          <el-button link type="warning" size="small" @click="resetPassword(row as UserRow)">重置密码</el-button>
         </template>
       </el-table-column>
       <template #empty><EmptyState description="没有符合条件的用户" /></template>

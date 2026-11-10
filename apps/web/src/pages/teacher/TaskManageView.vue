@@ -426,8 +426,8 @@ onBeforeUnmount(() => {
             <el-table-column label="操作" width="150" fixed="right">
               <template #default="{ row }">
                 <template v-if="row.status === 'SUBMITTED'">
-                  <el-button size="small" type="success" plain @click="onAccept(row)">验收通过</el-button>
-                  <el-button size="small" type="danger" plain @click="onReject(row)">驳回</el-button>
+                  <el-button size="small" type="success" plain @click="onAccept(row as AssignmentRow)">验收通过</el-button>
+                  <el-button size="small" type="danger" plain @click="onReject(row as AssignmentRow)">驳回</el-button>
                 </template>
                 <span v-else class="muted">—</span>
               </template>

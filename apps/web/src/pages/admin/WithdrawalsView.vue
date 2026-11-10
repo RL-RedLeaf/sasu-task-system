@@ -154,10 +154,10 @@ async function markPaid(row: WithdrawalRow): Promise<void> {
       <el-table-column label="操作" width="180" fixed="right">
         <template #default="{ row }">
           <template v-if="row.status === 'PENDING'">
-            <el-button link type="primary" size="small" @click="approve(row)">通过</el-button>
-            <el-button link type="danger" size="small" @click="reject(row)">驳回</el-button>
+            <el-button link type="primary" size="small" @click="approve(row as WithdrawalRow)">通过</el-button>
+            <el-button link type="danger" size="small" @click="reject(row as WithdrawalRow)">驳回</el-button>
           </template>
-          <el-button v-else-if="row.status === 'APPROVED'" link type="success" size="small" @click="markPaid(row)">
+          <el-button v-else-if="row.status === 'APPROVED'" link type="success" size="small" @click="markPaid(row as WithdrawalRow)">
             标记已发放
           </el-button>
           <template v-else-if="row.status === 'REJECTED'">

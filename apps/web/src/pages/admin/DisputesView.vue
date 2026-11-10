@@ -177,8 +177,8 @@ async function submitResolve(): Promise<void> {
       </el-table-column>
       <el-table-column label="操作" width="140" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" size="small" @click="openDetail(row)">详情</el-button>
-          <el-button v-if="row.status === 'OPEN'" link type="warning" size="small" @click="openResolve(row)">裁定</el-button>
+          <el-button link type="primary" size="small" @click="openDetail(row as DisputeRow)">详情</el-button>
+          <el-button v-if="row.status === 'OPEN'" link type="warning" size="small" @click="openResolve(row as DisputeRow)">裁定</el-button>
         </template>
       </el-table-column>
       <template #empty><EmptyState description="该状态下暂无仲裁" /></template>

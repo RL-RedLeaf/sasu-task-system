@@ -162,8 +162,8 @@ async function dismissReport(row: ReportRow): Promise<void> {
       <el-table-column label="操作" width="180" fixed="right">
         <template #default="{ row }">
           <template v-if="row.status === 'OPEN'">
-            <el-button link type="primary" size="small" @click="handleReport(row)">处理</el-button>
-            <el-button link type="danger" size="small" @click="dismissReport(row)">驳回举报</el-button>
+            <el-button link type="primary" size="small" @click="handleReport(row as ReportRow)">处理</el-button>
+            <el-button link type="danger" size="small" @click="dismissReport(row as ReportRow)">驳回举报</el-button>
           </template>
         </template>
       </el-table-column>

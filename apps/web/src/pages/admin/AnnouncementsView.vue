@@ -125,8 +125,8 @@ async function remove(row: AnnouncementRow): Promise<void> {
       </el-table-column>
       <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button v-if="row.status !== 'OFFLINE'" link type="danger" size="small" @click="remove(row)">下线</el-button>
+          <el-button link type="primary" size="small" @click="openEdit(row as AnnouncementRow)">编辑</el-button>
+          <el-button v-if="row.status !== 'OFFLINE'" link type="danger" size="small" @click="remove(row as AnnouncementRow)">下线</el-button>
         </template>
       </el-table-column>
       <template #empty><EmptyState description="还没有公告，点击右上角新建" /></template>
