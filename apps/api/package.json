@@ -12,6 +12,7 @@
     "test": "pnpm --filter @sasu/shared build && prisma generate && jest",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "prisma db seed",
+    "db:demo": "tsx scripts/demo-seed.ts",
     "start:prod": "node dist/main.js"
   },
   "prisma": {
