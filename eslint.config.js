@@ -26,6 +26,8 @@ export default tseslint.config(
   },
   {
     rules: {
+      // TS 编译器负责未定义全局检查（DOM lib 已含 crypto/navigator/File 等）
+      'no-undef': 'off',
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
