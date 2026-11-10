@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { useFeedback } from '@/composables/feedback';
 import { notificationsApi, type NotificationRow } from '@/api/admin';
 import { useNotificationStore } from '@/stores/notification';
 import type { NormalizedError } from '@/api/http';
@@ -11,6 +11,7 @@ import PageHeader from '@/components/PageHeader.vue';
 const PAGE_SIZE = 20;
 const router = useRouter();
 const notifyStore = useNotificationStore();
+const { message } = useFeedback();
 
 const tab = ref<'UNREAD' | 'ALL'>('UNREAD');
 const items = ref<NotificationRow[]>([]);
@@ -37,7 +38,7 @@ async function load(): Promise<void> {
     unread.value = data.unread;
     notifyStore.unread = data.unread;
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '加载失败');
+    message.error((e as NormalizedError).friendlyMessage ?? '加载失败');
   } finally {
     loading.value = false;
   }
@@ -87,10 +88,10 @@ async function markAllRead(): Promise<void> {
   markingAll.value = true;
   try {
     await notificationsApi.markAllRead();
-    ElMessage.success('已全部标记为已读');
+    message.success('已全部标记为已读');
     await load();
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '操作失败');
+    message.error((e as NormalizedError).friendlyMessage ?? '操作失败');
   } finally {
     markingAll.value = false;
   }
@@ -103,62 +104,63 @@ onMounted(() => {
 
 <template>
   <PageHeader title="站内通知" subtitle="任务接单、验收、驳回、结算与提现等进展都会在这里提醒你" />
-  <el-card shadow="never" class="block">
+  <a-card class="block">
     <div class="toolbar">
-      <el-tabs v-model="tab" class="toolbar-tabs" @tab-change="onTabChange">
-        <el-tab-pane :label="`未读（${unread}）`" name="UNREAD" />
-        <el-tab-pane label="全部" name="ALL" />
-      </el-tabs>
-      <el-button :disabled="unread === 0" :loading="markingAll" @click="markAllRead">全部已读</el-button>
+      <a-tabs v-model:active-key="tab" class="toolbar-tabs" @change="onTabChange">
+        <a-tab-pane :tab="`未读（${unread}）`" key="UNREAD" />
+        <a-tab-pane tab="全部" key="ALL" />
+      </a-tabs>
+      <a-button :disabled="unread === 0" :loading="markingAll" @click="markAllRead">全部已读</a-button>
     </div>
 
-    <div v-loading="loading" class="list-area">
-      <div v-if="items.length > 0" class="noti-list">
-        <div
-          v-for="n in items"
-          :key="n.id"
-          class="noti-item"
-          :class="{ unread: !n.readAt }"
-          @click="open(n)"
-        >
-          <div class="noti-main">
-            <span v-if="!n.readAt" class="dot" />
-            <span class="noti-title" :class="{ bold: !n.readAt }">{{ n.title }}</span>
-            <span class="noti-time">{{ fmtTime(n.createdAt) }}</span>
-          </div>
-          <div class="noti-body">{{ n.body }}</div>
-          <div class="noti-foot">
-            <el-tag size="small" effect="plain" type="info">{{ n.type }}</el-tag>
-            <el-link
-              v-if="n.payload?.taskId"
-              type="primary"
-              :underline="false"
-              class="noti-link"
-              @click.stop="goTask(n)"
-            >
-              查看任务 →
-            </el-link>
+    <a-spin :spinning="loading">
+      <div class="list-area">
+        <div v-if="items.length > 0" class="noti-list">
+          <div
+            v-for="n in items"
+            :key="n.id"
+            class="noti-item"
+            :class="{ unread: !n.readAt }"
+            @click="open(n)"
+          >
+            <div class="noti-main">
+              <span v-if="!n.readAt" class="dot" />
+              <span class="noti-title" :class="{ bold: !n.readAt }">{{ n.title }}</span>
+              <span class="noti-time">{{ fmtTime(n.createdAt) }}</span>
+            </div>
+            <div class="noti-body">{{ n.body }}</div>
+            <div class="noti-foot">
+              <a-tag>{{ n.type }}</a-tag>
+              <a-button
+                v-if="n.payload?.taskId"
+                type="link"
+                size="small"
+                class="noti-link"
+                @click.stop="goTask(n)"
+              >
+                查看任务 →
+              </a-button>
+            </div>
           </div>
         </div>
+        <EmptyState
+          v-else-if="!loading"
+          :description="isUnreadTab ? '没有未读通知' : '还没有收到通知'"
+        />
       </div>
-      <EmptyState
-        v-else-if="!loading"
-        :description="isUnreadTab ? '没有未读通知' : '还没有收到通知'"
-      />
-    </div>
+    </a-spin>
 
     <div class="pager">
-      <el-pagination
-        v-model:current-page="page"
+      <a-pagination
+        v-model:current="page"
         :page-size="PAGE_SIZE"
         :total="total"
-        layout="total, prev, pager, next"
-        background
-        hide-on-single-page
-        @current-change="changePage"
+        :show-size-changer="false"
+        :hide-on-single-page="true"
+        @change="changePage"
       />
     </div>
-  </el-card>
+  </a-card>
 </template>
 
 <style scoped>
@@ -174,7 +176,6 @@ onMounted(() => {
 }
 .toolbar-tabs {
   flex: 1;
-  margin-bottom: -20px;
 }
 .list-area {
   min-height: 160px;
@@ -231,6 +232,7 @@ onMounted(() => {
 }
 .noti-link {
   font-size: 13px;
+  padding: 0;
 }
 .pager {
   margin-top: 16px;

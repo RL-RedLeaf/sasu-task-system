@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
+import { useFeedback } from '@/composables/feedback';
+import type { FormInstance } from 'ant-design-vue';
+import type { Rule } from 'ant-design-vue/es/form';
 import { useAuthStore } from '@/stores/auth';
 import { authApi } from '@/api/auth';
 import { NormalizedError } from '@/api/http';
@@ -9,18 +11,19 @@ import { NormalizedError } from '@/api/http';
 /** 首登强制改密（PRD AUTH-02/03）：改密后旧会话失效，重新登录 */
 const auth = useAuthStore();
 const router = useRouter();
+const { message } = useFeedback();
 const formRef = ref<FormInstance>();
 const loading = ref(false);
 const form = reactive({ oldPassword: '', newPassword: '', confirm: '' });
 
-const rules: FormRules = {
+const rules: Record<string, Rule[]> = {
   oldPassword: [{ required: true, message: '请输入当前密码', trigger: 'blur' }],
   newPassword: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
     {
       validator: (_r, value: string, cb) => {
         if (value && (value.length < 8 || !/[a-zA-Z]/.test(value) || !/\d/.test(value))) {
-          cb(new Error('新密码至少 8 位，且需同时包含字母和数字'));
+          cb('新密码至少 8 位，且需同时包含字母和数字');
         } else {
           cb();
         }
@@ -31,7 +34,7 @@ const rules: FormRules = {
   confirm: [
     {
       validator: (_r, value: string, cb) => {
-        if (value !== form.newPassword) cb(new Error('两次输入的密码不一致'));
+        if (value !== form.newPassword) cb('两次输入的密码不一致');
         else cb();
       },
       trigger: 'blur',
@@ -45,13 +48,13 @@ async function onSubmit(): Promise<void> {
   try {
     const username = auth.user?.username;
     await authApi.changePassword(form.oldPassword, form.newPassword);
-    ElMessage.success('密码修改成功，请重新登录');
+    message.success('密码修改成功，请重新登录');
     auth.reset();
     if (username) await auth.login(username, form.newPassword);
     await router.push('/');
   } catch (error) {
     const err = error as NormalizedError;
-    ElMessage.error(err.friendlyMessage ?? '修改失败');
+    message.error(err.friendlyMessage ?? '修改失败');
   } finally {
     loading.value = false;
   }
@@ -60,24 +63,24 @@ async function onSubmit(): Promise<void> {
 
 <template>
   <div class="login-wrap">
-    <el-card class="card" shadow="never">
+    <a-card class="card">
       <h2>修改初始密码</h2>
       <p class="tip">首次登录必须修改初始密码后才能使用系统。</p>
-      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent>
-        <el-form-item label="当前密码" prop="oldPassword">
-          <el-input v-model="form.oldPassword" type="password" show-password />
-        </el-form-item>
-        <el-form-item label="新密码（≥8 位，含字母和数字）" prop="newPassword">
-          <el-input v-model="form.newPassword" type="password" show-password />
-        </el-form-item>
-        <el-form-item label="确认新密码" prop="confirm">
-          <el-input v-model="form.confirm" type="password" show-password />
-        </el-form-item>
-        <el-button class="submit" type="primary" native-type="submit" :loading="loading" @click="onSubmit">
+      <a-form ref="formRef" :model="form" :rules="rules" layout="vertical" @submit.prevent>
+        <a-form-item label="当前密码" name="oldPassword">
+          <a-input-password v-model:value="form.oldPassword" />
+        </a-form-item>
+        <a-form-item label="新密码（≥8 位，含字母和数字）" name="newPassword">
+          <a-input-password v-model:value="form.newPassword" />
+        </a-form-item>
+        <a-form-item label="确认新密码" name="confirm">
+          <a-input-password v-model:value="form.confirm" />
+        </a-form-item>
+        <a-button class="submit" type="primary" html-type="submit" :loading="loading" @click="onSubmit">
           修改并重新登录
-        </el-button>
-      </el-form>
-    </el-card>
+        </a-button>
+      </a-form>
+    </a-card>
   </div>
 </template>
 
@@ -99,5 +102,6 @@ async function onSubmit(): Promise<void> {
 }
 .submit {
   width: 100%;
+  margin-top: 4px;
 }
 </style>

@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { FormInstance, FormRules } from 'element-plus';
-import { ElMessage } from 'element-plus';
+import { useFeedback } from '@/composables/feedback';
+import type { FormInstance } from 'ant-design-vue';
+import type { Rule } from 'ant-design-vue/es/form';
 import { useAuthStore } from '@/stores/auth';
 import { NormalizedError } from '@/api/http';
 
 const auth = useAuthStore();
 const route = useRoute();
 const router = useRouter();
+const { message } = useFeedback();
 const formRef = ref<FormInstance>();
 const loading = ref(false);
 const form = reactive({ username: '', password: '' });
-const rules: FormRules = {
+const rules: Record<string, Rule[]> = {
   username: [{ required: true, message: '请输入学号 / 工号', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 };
@@ -30,7 +32,7 @@ async function onSubmit(): Promise<void> {
     await router.push(typeof redirect === 'string' ? redirect : '/');
   } catch (error) {
     const err = error as NormalizedError;
-    ElMessage.error(err.friendlyMessage ?? '登录失败');
+    message.error(err.friendlyMessage ?? '登录失败');
   } finally {
     loading.value = false;
   }
@@ -39,27 +41,25 @@ async function onSubmit(): Promise<void> {
 
 <template>
   <div class="login-wrap">
-    <el-card class="login-card" shadow="never">
+    <a-card class="login-card">
       <h2 class="login-title">登录</h2>
       <p class="tip">账号由管理员分配，忘记密码请联系管理员。首次登录需修改初始密码。</p>
-      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent>
-        <el-form-item label="学号 / 工号" prop="username">
-          <el-input v-model="form.username" autocomplete="username" placeholder="学号 / 工号" />
-        </el-form-item>
-        <el-form-item label="密码" prop="password">
-          <el-input
-            v-model="form.password"
-            type="password"
-            show-password
+      <a-form ref="formRef" :model="form" :rules="rules" layout="vertical" @submit.prevent>
+        <a-form-item label="学号 / 工号" name="username">
+          <a-input v-model:value="form.username" autocomplete="username" placeholder="学号 / 工号" />
+        </a-form-item>
+        <a-form-item label="密码" name="password">
+          <a-input-password
+            v-model:value="form.password"
             autocomplete="current-password"
             placeholder="密码"
           />
-        </el-form-item>
-        <el-button class="submit" type="primary" native-type="submit" :loading="loading" @click="onSubmit">
+        </a-form-item>
+        <a-button class="submit" type="primary" html-type="submit" :loading="loading" @click="onSubmit">
           登录
-        </el-button>
-      </el-form>
-    </el-card>
+        </a-button>
+      </a-form>
+    </a-card>
   </div>
 </template>
 
@@ -84,5 +84,6 @@ async function onSubmit(): Promise<void> {
 }
 .submit {
   width: 100%;
+  margin-top: 4px;
 }
 </style>
