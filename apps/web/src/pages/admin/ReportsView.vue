@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { message, prompt } from '@/composables/feedback';
 import type { NormalizedError } from '@/api/http';
 import { communityApi } from '@/api/admin';
 import PageHeader from '@/components/PageHeader.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import EmptyState from '@/components/EmptyState.vue';
+import AppPagination from '@/components/AppPagination.vue';
+import type { TableColumnsType } from 'ant-design-vue';
 
 function errMsg(e: unknown): string {
   return (e as NormalizedError).friendlyMessage ?? '操作失败';
@@ -21,6 +23,16 @@ function truncate(text: string, len = 40): string {
 }
 
 const router = useRouter();
+
+const columns: TableColumnsType = [
+  { title: '举报人', key: 'reporter', width: 130 },
+  { title: '类型', key: 'targetType', width: 100 },
+  { title: '目标 ID', key: 'targetId', width: 120 },
+  { title: '理由', key: 'reason', ellipsis: true },
+  { title: '时间', key: 'createdAt', width: 170 },
+  { title: '状态', key: 'status', width: 100 },
+  { title: '操作', key: 'action', width: 180, fixed: 'right' },
+];
 
 const TABS = [
   { status: 'OPEN', label: '待处理' },
@@ -55,7 +67,7 @@ async function load(): Promise<void> {
     items.value = data.items as ReportRow[];
     total.value = data.total;
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     loading.value = false;
   }
@@ -65,10 +77,6 @@ watch(activeStatus, () => {
   page.value = 1;
   void load();
 });
-
-function onPageChange(): void {
-  void load();
-}
 
 onMounted(() => void load());
 
@@ -82,43 +90,41 @@ async function handleReport(row: ReportRow): Promise<void> {
     row.targetType === 'TASK'
       ? `如内容违规，请先到任务管理页对该任务（#${row.targetId}）执行「强制下架」，再回来填写处理备注。`
       : `目标为留言（#${row.targetId}），请确认后填写处理备注。`;
+  let note: string;
   try {
-    const { value } = await ElMessageBox.prompt(
-      `${targetHint} 请填写处理备注（必填）。`,
-      `处理举报 #${row.id}`,
-      {
-        confirmButtonText: '确认处理',
-        cancelButtonText: '取消',
-        inputPlaceholder: '处理备注，如：已强制下架该任务',
-        inputValidator: (v: string) => (v && v.trim() ? true : '处理备注不能为空'),
-      },
-    );
-    await communityApi.handleReport(row.id, { note: value.trim() });
-    ElMessage.success('举报已标记处理');
+    note = (
+      await prompt({
+        title: `处理举报 #${row.id}`,
+        message: `${targetHint} 请填写处理备注（必填）。`,
+        placeholder: '处理备注，如：已强制下架该任务',
+        validate: (v: string) => (v && v.trim() ? true : '处理备注不能为空'),
+      })
+    ).trim();
+    await communityApi.handleReport(row.id, { note });
+    message.success('举报已标记处理');
     void load();
   } catch (e) {
-    if (e !== 'cancel' && e !== 'close') ElMessage.error(errMsg(e));
+    if (e !== 'cancel' && e !== 'close') message.error(errMsg(e));
   }
 }
 
 // ---------- 驳回举报 ----------
 async function dismissReport(row: ReportRow): Promise<void> {
+  let reason: string;
   try {
-    const { value } = await ElMessageBox.prompt(
-      '确认驳回该举报吗？驳回表示举报内容不成立，请填写理由（必填）。',
-      `驳回举报 #${row.id}`,
-      {
-        confirmButtonText: '确认驳回',
-        cancelButtonText: '取消',
-        inputPlaceholder: '驳回理由',
-        inputValidator: (v: string) => (v && v.trim() ? true : '驳回理由不能为空'),
-      },
-    );
-    await communityApi.handleReport(row.id, { dismiss: true, note: value.trim() });
-    ElMessage.success('举报已驳回');
+    reason = (
+      await prompt({
+        title: `驳回举报 #${row.id}`,
+        message: '确认驳回该举报吗？驳回表示举报内容不成立，请填写理由（必填）。',
+        placeholder: '驳回理由',
+        validate: (v: string) => (v && v.trim() ? true : '驳回理由不能为空'),
+      })
+    ).trim();
+    await communityApi.handleReport(row.id, { dismiss: true, note: reason });
+    message.success('举报已驳回');
     void load();
   } catch (e) {
-    if (e !== 'cancel' && e !== 'close') ElMessage.error(errMsg(e));
+    if (e !== 'cancel' && e !== 'close') message.error(errMsg(e));
   }
 }
 </script>
@@ -126,60 +132,49 @@ async function dismissReport(row: ReportRow): Promise<void> {
 <template>
   <PageHeader title="举报处理" subtitle="对任务/留言违规举报的处理与驳回" />
 
-  <el-card shadow="never" class="block">
-    <el-tabs v-model="activeStatus">
-      <el-tab-pane v-for="tab in TABS" :key="tab.status" :name="tab.status" :label="tab.label" />
-    </el-tabs>
+  <a-card class="block">
+    <a-tabs v-model:active-key="activeStatus">
+      <a-tab-pane v-for="tab in TABS" :key="tab.status" :tab="tab.label" />
+    </a-tabs>
 
-    <el-table v-loading="loading" :data="items" stripe>
-      <el-table-column label="举报人" width="130">
-        <template #default="{ row }">{{ row.reporter?.name ?? '—' }}</template>
-      </el-table-column>
-      <el-table-column label="类型" width="100">
-        <template #default="{ row }">{{ row.targetType === 'TASK' ? '任务' : '留言' }}</template>
-      </el-table-column>
-      <el-table-column label="目标 ID" width="120">
-        <template #default="{ row }">
-          <el-link v-if="row.targetType === 'TASK'" type="primary" :underline="false" @click="goTaskAdmin(row.targetId)">
-            #{{ row.targetId }}
-          </el-link>
-          <span v-else>#{{ row.targetId }}</span>
+    <a-table
+      :columns="columns"
+      :data-source="items"
+      :loading="loading"
+      :pagination="false"
+      row-key="id"
+      :scroll="{ x: 1000 }"
+    >
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'reporter'">{{ record.reporter?.name ?? '—' }}</template>
+        <template v-else-if="column.key === 'targetType'">{{ record.targetType === 'TASK' ? '任务' : '留言' }}</template>
+        <template v-else-if="column.key === 'targetId'">
+          <a-button v-if="record.targetType === 'TASK'" type="link" class="op-link" @click="goTaskAdmin(record.targetId)">
+            #{{ record.targetId }}
+          </a-button>
+          <span v-else>#{{ record.targetId }}</span>
         </template>
-      </el-table-column>
-      <el-table-column label="理由" min-width="220" show-overflow-tooltip>
-        <template #default="{ row }">{{ truncate(row.reason) }}</template>
-      </el-table-column>
-      <el-table-column label="时间" width="170">
-        <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>
-      </el-table-column>
-      <el-table-column label="状态" width="100">
-        <template #default="{ row }">
+        <template v-else-if="column.key === 'reason'">{{ truncate(record.reason) }}</template>
+        <template v-else-if="column.key === 'createdAt'">{{ fmtTime(record.createdAt) }}</template>
+        <template v-else-if="column.key === 'status'">
           <StatusTag
-            :status="row.status === 'HANDLED' ? '已处理' : row.status === 'DISMISSED' ? '已驳回' : row.status"
+            :status="record.status === 'HANDLED' ? '已处理' : record.status === 'DISMISSED' ? '已驳回' : record.status"
           />
         </template>
-      </el-table-column>
-      <el-table-column label="操作" width="180" fixed="right">
-        <template #default="{ row }">
-          <template v-if="row.status === 'OPEN'">
-            <el-button link type="primary" size="small" @click="handleReport(row as ReportRow)">处理</el-button>
-            <el-button link type="danger" size="small" @click="dismissReport(row as ReportRow)">驳回举报</el-button>
+        <template v-else-if="column.key === 'action'">
+          <template v-if="record.status === 'OPEN'">
+            <a-button type="link" size="small" class="op-link" @click="handleReport(record as ReportRow)">处理</a-button>
+            <a-button type="link" size="small" class="op-link op-danger" @click="dismissReport(record as ReportRow)">驳回举报</a-button>
           </template>
         </template>
-      </el-table-column>
-      <template #empty><EmptyState description="该状态下暂无举报" /></template>
-    </el-table>
+      </template>
+      <template #emptyText><EmptyState description="该状态下暂无举报" /></template>
+    </a-table>
 
     <div class="pager">
-      <el-pagination
-        v-model:current-page="page"
-        v-model:page-size="pageSize"
-        :total="total"
-        layout="total, prev, pager, next"
-        @current-change="onPageChange"
-      />
+      <AppPagination v-model:page="page" :page-size="pageSize" :total="total" @change="load" />
     </div>
-  </el-card>
+  </a-card>
 </template>
 
 <style scoped>
@@ -191,5 +186,11 @@ async function dismissReport(row: ReportRow): Promise<void> {
   margin-top: 12px;
   display: flex;
   justify-content: flex-end;
+}
+.op-link {
+  padding: 0;
+}
+.op-danger {
+  color: var(--sasu-color-danger);
 }
 </style>

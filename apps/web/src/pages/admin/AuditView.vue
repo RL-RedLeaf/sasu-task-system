@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { message } from '@/composables/feedback';
 import { labelOf } from '@sasu/shared';
 import type { NormalizedError } from '@/api/http';
 import { auditApi, type AuditRow } from '@/api/admin';
 import PageHeader from '@/components/PageHeader.vue';
 import EmptyState from '@/components/EmptyState.vue';
+import AppPagination from '@/components/AppPagination.vue';
+import type { TableColumnsType } from 'ant-design-vue';
 
 function errMsg(e: unknown): string {
   return (e as NormalizedError).friendlyMessage ?? '操作失败';
@@ -21,12 +23,30 @@ function fmtTime(value: string): string {
 
 const roleLabels: Record<string, string> = { STUDENT: '学生', TEACHER: '教师', ADMIN: '管理员', SYSTEM: '系统' };
 
+const columns: TableColumnsType = [
+  { title: '时间', key: 'createdAt', width: 170 },
+  { title: '操作人 ID', key: 'actorId', width: 110, align: 'center' },
+  { title: '角色', key: 'actorRole', width: 90 },
+  { title: '动作', key: 'action' },
+  { title: '目标类型', key: 'targetType', width: 140 },
+  { title: '目标 ID', key: 'targetId', width: 110, align: 'center' },
+  { title: '原因', key: 'reason', ellipsis: true },
+  { title: 'IP', key: 'ip', width: 140 },
+];
+
 const loading = ref(false);
 const items = ref<AuditRow[]>([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = ref(20);
 const filters = reactive({ action: '', actorRole: '' });
+
+const roleOptions = [
+  { label: '学生', value: 'STUDENT' },
+  { label: '教师', value: 'TEACHER' },
+  { label: '管理员', value: 'ADMIN' },
+  { label: '系统', value: 'SYSTEM' },
+];
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -40,7 +60,7 @@ async function load(): Promise<void> {
     items.value = data.items;
     total.value = data.total;
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     loading.value = false;
   }
@@ -51,74 +71,54 @@ function onSearch(): void {
   void load();
 }
 
-function onPageChange(): void {
-  void load();
-}
-
 onMounted(() => void load());
 </script>
 
 <template>
   <PageHeader title="审计日志" subtitle="管理员与系统的关键操作留痕，可按动作/角色筛选" />
 
-  <el-card shadow="never" class="block">
+  <a-card class="block">
     <div class="toolbar">
-      <el-input
-        v-model="filters.action"
+      <a-input
+        v-model:value="filters.action"
         placeholder="动作 action，如 USER_DISABLE、TASK_PRICE"
-        clearable
+        allow-clear
         style="width: 260px"
         @keyup.enter="onSearch"
       />
-      <el-select v-model="filters.actorRole" placeholder="操作人角色" clearable style="width: 140px">
-        <el-option label="学生" value="STUDENT" />
-        <el-option label="教师" value="TEACHER" />
-        <el-option label="管理员" value="ADMIN" />
-        <el-option label="系统" value="SYSTEM" />
-      </el-select>
-      <el-button type="primary" @click="onSearch">查询</el-button>
+      <a-select
+        v-model:value="filters.actorRole"
+        placeholder="操作人角色"
+        allow-clear
+        style="width: 140px"
+        :options="roleOptions"
+      />
+      <a-button type="primary" @click="onSearch">查询</a-button>
     </div>
 
-    <el-table v-loading="loading" :data="items" stripe>
-      <el-table-column label="时间" width="170">
-        <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>
-      </el-table-column>
-      <el-table-column label="操作人 ID" width="110" align="center">
-        <template #default="{ row }">{{ row.actorId }}</template>
-      </el-table-column>
-      <el-table-column label="角色" width="90">
-        <template #default="{ row }">{{ roleLabels[row.actorRole] ?? row.actorRole }}</template>
-      </el-table-column>
-      <el-table-column label="动作" min-width="180">
-        <template #default="{ row }">
-          <span>{{ auditActionText(row.action) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="目标类型" width="140">
-        <template #default="{ row }">{{ row.targetType }}</template>
-      </el-table-column>
-      <el-table-column label="目标 ID" width="110" align="center">
-        <template #default="{ row }">{{ row.targetId ?? '—' }}</template>
-      </el-table-column>
-      <el-table-column label="原因" min-width="200" show-overflow-tooltip>
-        <template #default="{ row }">{{ row.reason ?? '—' }}</template>
-      </el-table-column>
-      <el-table-column label="IP" width="140">
-        <template #default="{ row }">{{ row.ip ?? '—' }}</template>
-      </el-table-column>
-      <template #empty><EmptyState description="暂无审计日志" /></template>
-    </el-table>
+    <a-table
+      :columns="columns"
+      :data-source="items"
+      :loading="loading"
+      :pagination="false"
+      row-key="id"
+      :scroll="{ x: 1100 }"
+    >
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'createdAt'">{{ fmtTime(record.createdAt) }}</template>
+        <template v-else-if="column.key === 'actorRole'">{{ roleLabels[record.actorRole] ?? record.actorRole }}</template>
+        <template v-else-if="column.key === 'action'">{{ auditActionText(record.action) }}</template>
+        <template v-else-if="column.key === 'targetId'">{{ record.targetId ?? '—' }}</template>
+        <template v-else-if="column.key === 'reason'">{{ record.reason ?? '—' }}</template>
+        <template v-else-if="column.key === 'ip'">{{ record.ip ?? '—' }}</template>
+      </template>
+      <template #emptyText><EmptyState description="暂无审计日志" /></template>
+    </a-table>
 
     <div class="pager">
-      <el-pagination
-        v-model:current-page="page"
-        v-model:page-size="pageSize"
-        :total="total"
-        layout="total, prev, pager, next"
-        @current-change="onPageChange"
-      />
+      <AppPagination v-model:page="page" :page-size="pageSize" :total="total" @change="load" />
     </div>
-  </el-card>
+  </a-card>
 </template>
 
 <style scoped>

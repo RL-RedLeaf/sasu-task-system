@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { message } from '@/composables/feedback';
 import type { NormalizedError } from '@/api/http';
 import { statsApi } from '@/api/admin';
 import PageHeader from '@/components/PageHeader.vue';
@@ -32,7 +32,7 @@ async function load(): Promise<void> {
   try {
     overview.value = await statsApi.overview();
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     loading.value = false;
   }
@@ -81,70 +81,80 @@ const paidTotal = computed(() => (overview.value?.paidBaseTotal ?? 0) + (overvie
   <div class="page-top">
     <PageHeader title="平台统计" subtitle="任务、用户与积分的关键指标一览" />
     <a :href="statsApi.exportUrl" class="export-btn">
-      <el-button type="primary">导出统计报表（xlsx）</el-button>
+      <a-button type="primary">导出统计报表（xlsx）</a-button>
     </a>
   </div>
 
-  <div v-loading="loading">
-    <el-row :gutter="16">
-      <el-col :span="6">
-        <el-card shadow="never" class="block">
+  <a-spin :spinning="loading">
+    <a-row :gutter="16">
+      <a-col :span="6">
+        <a-card class="block">
           <div class="stat-label">任务总数</div>
           <div class="stat-value"><PointsNum :value="taskStatusRows.reduce((a, b) => a + b.count, 0)" /></div>
           <div class="stat-sub">其中待定价 {{ overview?.pendingReward ?? 0 }} 个</div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="never" class="block">
+        </a-card>
+      </a-col>
+      <a-col :span="6">
+        <a-card class="block">
           <div class="stat-label">用户总数</div>
           <div class="stat-value"><PointsNum :value="userRoleRows.reduce((a, b) => a + b.count, 0)" /></div>
           <div class="stat-sub">学生 {{ userRoleRows.find((r) => r.role === 'STUDENT')?.count ?? 0 }} / 教师 {{ userRoleRows.find((r) => r.role === 'TEACHER')?.count ?? 0 }}</div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="never" class="block">
+        </a-card>
+      </a-col>
+      <a-col :span="6">
+        <a-card class="block">
           <div class="stat-label">任务完成率（近 30 天）</div>
           <div class="stat-value">{{ completionRate }}<span class="pct">%</span></div>
           <div class="stat-sub">待审批提现 {{ overview?.withdrawalsPending ?? 0 }} / 待处理仲裁 {{ overview?.disputesOpen ?? 0 }}</div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="never" class="block">
+        </a-card>
+      </a-col>
+      <a-col :span="6">
+        <a-card class="block">
           <div class="stat-label">累计发放积分</div>
           <div class="stat-value"><PointsNum :value="paidTotal" suffix="分" /></div>
           <div class="stat-sub">基础 {{ overview?.paidBaseTotal ?? 0 }} + 绩效 {{ overview?.paidBonusTotal ?? 0 }}</div>
-        </el-card>
-      </el-col>
-    </el-row>
+        </a-card>
+      </a-col>
+    </a-row>
 
-    <el-row :gutter="16" class="mt16">
-      <el-col :span="12">
-        <el-card shadow="never" class="block">
-          <template #header>任务状态分布</template>
+    <a-row :gutter="16" class="mt16 dash-row">
+      <a-col :span="12">
+        <a-card class="block" title="任务状态分布">
           <div v-for="row in taskStatusRows" :key="row.status" class="dist-row">
             <span class="dist-label">{{ row.label }}</span>
-            <el-progress class="dist-bar" :percentage="row.percent" :stroke-width="14" :show-text="false" />
+            <a-progress
+              class="dist-bar"
+              :percent="row.percent"
+              :stroke-width="14"
+              :show-info="false"
+              stroke-color="var(--sasu-color-primary)"
+            />
             <span class="dist-count"><PointsNum :value="row.count" /></span>
           </div>
           <p class="tip">
             退回积分池累计 <b><PointsNum :value="overview?.refundedTotal ?? 0" suffix="分" /></b>，违约扣分合计
             <b><PointsNum :value="overview?.violationTotal ?? 0" suffix="分" /></b>
           </p>
-        </el-card>
-      </el-col>
-      <el-col :span="12">
-        <el-card shadow="never" class="block">
-          <template #header>用户角色分布</template>
+        </a-card>
+      </a-col>
+      <a-col :span="12">
+        <a-card class="block" title="用户角色分布">
           <div v-for="row in userRoleRows" :key="row.role" class="dist-row">
             <span class="dist-label">{{ row.label }}</span>
-            <el-progress class="dist-bar" :percentage="row.percent" :stroke-width="14" :show-text="false" />
+            <a-progress
+              class="dist-bar"
+              :percent="row.percent"
+              :stroke-width="14"
+              :show-info="false"
+              stroke-color="var(--sasu-color-secondary)"
+            />
             <span class="dist-count"><PointsNum :value="row.count" /></span>
           </div>
           <p class="tip">完成率按已结算任务占应结算任务比例统计（近 30 天）</p>
-        </el-card>
-      </el-col>
-    </el-row>
-  </div>
+        </a-card>
+      </a-col>
+    </a-row>
+  </a-spin>
 </template>
 
 <style scoped>
@@ -163,6 +173,14 @@ const paidTotal = computed(() => (overview.value?.paidBaseTotal ?? 0) + (overvie
 .block {
   border-radius: var(--sasu-radius-base);
   box-shadow: var(--sasu-shadow-card);
+  height: 100%;
+}
+.dash-row :deep(.ant-col) {
+  display: flex;
+  flex-direction: column;
+}
+.dash-row .block {
+  flex: 1;
 }
 .stat-label {
   color: var(--sasu-text-secondary);

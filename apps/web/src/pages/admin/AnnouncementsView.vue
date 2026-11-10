@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import type { FormInstance, FormRules } from 'element-plus';
+import { confirm, message } from '@/composables/feedback';
+import type { FormInstance } from 'ant-design-vue';
+import type { Rule } from 'ant-design-vue/es/form';
 import type { NormalizedError } from '@/api/http';
 import { communityApi, type AnnouncementRow } from '@/api/admin';
 import PageHeader from '@/components/PageHeader.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import EmptyState from '@/components/EmptyState.vue';
+import AppPagination from '@/components/AppPagination.vue';
+import type { TableColumnsType } from 'ant-design-vue';
 
 function errMsg(e: unknown): string {
   return (e as NormalizedError).friendlyMessage ?? '操作失败';
@@ -17,6 +20,15 @@ function fmtTime(value: string | null): string {
 }
 
 const statusLabels: Record<string, string> = { DRAFT: '草稿', PUBLISHED: '发布', OFFLINE: '下线' };
+
+const columns: TableColumnsType = [
+  { title: '标题', dataIndex: 'title', key: 'title', ellipsis: true },
+  { title: '内容', dataIndex: 'content', key: 'content', ellipsis: true },
+  { title: '状态', key: 'status', width: 90 },
+  { title: '发布时间', key: 'publishedAt', width: 170 },
+  { title: '创建时间', key: 'createdAt', width: 170 },
+  { title: '操作', key: 'action', width: 150, fixed: 'right' },
+];
 
 const loading = ref(false);
 const items = ref<AnnouncementRow[]>([]);
@@ -31,26 +43,22 @@ async function load(): Promise<void> {
     items.value = data.items;
     total.value = data.total;
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     loading.value = false;
   }
 }
 
-function onPageChange(): void {
-  void load();
-}
-
 onMounted(() => void load());
 
 // ---------- 新建 / 编辑 ----------
-const dialogVisible = ref(false);
+const dialogOpen = ref(false);
 const editingId = ref<string | null>(null);
 const formRef = ref<FormInstance>();
 const saving = ref(false);
 const form = reactive({ title: '', content: '', status: 'DRAFT' });
 
-const rules: FormRules = {
+const rules: Record<string, Rule[]> = {
   title: [{ required: true, message: '请输入公告标题', trigger: 'blur' }],
   content: [{ required: true, message: '请输入公告内容', trigger: 'blur' }],
   status: [{ required: true, message: '请选择状态', trigger: 'change' }],
@@ -59,13 +67,13 @@ const rules: FormRules = {
 function openCreate(): void {
   editingId.value = null;
   Object.assign(form, { title: '', content: '', status: 'DRAFT' });
-  dialogVisible.value = true;
+  dialogOpen.value = true;
 }
 
 function openEdit(row: AnnouncementRow): void {
   editingId.value = row.id;
   Object.assign(form, { title: row.title, content: row.content, status: row.status });
-  dialogVisible.value = true;
+  dialogOpen.value = true;
 }
 
 async function submit(): Promise<void> {
@@ -74,15 +82,15 @@ async function submit(): Promise<void> {
   try {
     if (editingId.value) {
       await communityApi.updateAnnouncement(editingId.value, { ...form });
-      ElMessage.success('已保存');
+      message.success('已保存');
     } else {
       await communityApi.createAnnouncement({ ...form });
-      ElMessage.success('已创建');
+      message.success('已创建');
     }
-    dialogVisible.value = false;
+    dialogOpen.value = false;
     void load();
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     saving.value = false;
   }
@@ -90,16 +98,17 @@ async function submit(): Promise<void> {
 
 async function remove(row: AnnouncementRow): Promise<void> {
   try {
-    await ElMessageBox.confirm(`确认删除公告「${row.title}」吗？`, '删除公告', {
-      confirmButtonText: '确认删除',
-      cancelButtonText: '取消',
-      type: 'warning',
+    await confirm({
+      title: '删除公告',
+      content: `确认删除公告「${row.title}」吗？`,
+      icon: 'warning',
+      okText: '确认删除',
     });
     await communityApi.updateAnnouncement(row.id, { status: 'OFFLINE' });
-    ElMessage.success('已下线该公告');
+    message.success('已下线该公告');
     void load();
   } catch (e) {
-    if (e !== 'cancel' && e !== 'close') ElMessage.error(errMsg(e));
+    if (e !== 'cancel' && e !== 'close') message.error(errMsg(e));
   }
 }
 </script>
@@ -107,63 +116,56 @@ async function remove(row: AnnouncementRow): Promise<void> {
 <template>
   <div class="page-top">
     <PageHeader title="公告管理" subtitle="面向全体用户的站内公告，支持草稿/发布/下线" />
-    <el-button type="primary" @click="openCreate">新建公告</el-button>
+    <a-button type="primary" @click="openCreate">新建公告</a-button>
   </div>
 
-  <el-card shadow="never" class="block">
-    <el-table v-loading="loading" :data="items" stripe>
-      <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
-      <el-table-column prop="content" label="内容" min-width="280" show-overflow-tooltip />
-      <el-table-column label="状态" width="90">
-        <template #default="{ row }"><StatusTag :status="statusLabels[row.status as string] ?? row.status" /></template>
-      </el-table-column>
-      <el-table-column label="发布时间" width="170">
-        <template #default="{ row }">{{ fmtTime(row.publishedAt) }}</template>
-      </el-table-column>
-      <el-table-column label="创建时间" width="170">
-        <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="150" fixed="right">
-        <template #default="{ row }">
-          <el-button link type="primary" size="small" @click="openEdit(row as AnnouncementRow)">编辑</el-button>
-          <el-button v-if="row.status !== 'OFFLINE'" link type="danger" size="small" @click="remove(row as AnnouncementRow)">下线</el-button>
+  <a-card class="block">
+    <a-table
+      :columns="columns"
+      :data-source="items"
+      :loading="loading"
+      :pagination="false"
+      row-key="id"
+      :scroll="{ x: 1000 }"
+    >
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'status'"><StatusTag :status="statusLabels[record.status as string] ?? record.status" /></template>
+        <template v-else-if="column.key === 'publishedAt'">{{ fmtTime(record.publishedAt) }}</template>
+        <template v-else-if="column.key === 'createdAt'">{{ fmtTime(record.createdAt) }}</template>
+        <template v-else-if="column.key === 'action'">
+          <a-button type="link" size="small" class="op-link" @click="openEdit(record as AnnouncementRow)">编辑</a-button>
+          <a-button v-if="record.status !== 'OFFLINE'" type="link" size="small" class="op-link op-danger" @click="remove(record as AnnouncementRow)">下线</a-button>
         </template>
-      </el-table-column>
-      <template #empty><EmptyState description="还没有公告，点击右上角新建" /></template>
-    </el-table>
+      </template>
+      <template #emptyText><EmptyState description="还没有公告，点击右上角新建" /></template>
+    </a-table>
 
     <div class="pager">
-      <el-pagination
-        v-model:current-page="page"
-        v-model:page-size="pageSize"
-        :total="total"
-        layout="total, prev, pager, next"
-        @current-change="onPageChange"
-      />
+      <AppPagination v-model:page="page" :page-size="pageSize" :total="total" @change="load" />
     </div>
-  </el-card>
+  </a-card>
 
-  <el-dialog v-model="dialogVisible" :title="editingId ? '编辑公告' : '新建公告'" width="560px">
-    <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
-      <el-form-item label="标题" prop="title">
-        <el-input v-model="form.title" maxlength="50" show-word-limit />
-      </el-form-item>
-      <el-form-item label="内容" prop="content">
-        <el-input v-model="form.content" type="textarea" :rows="6" maxlength="1000" show-word-limit />
-      </el-form-item>
-      <el-form-item label="状态" prop="status">
-        <el-radio-group v-model="form.status">
-          <el-radio value="DRAFT">草稿</el-radio>
-          <el-radio value="PUBLISHED">发布</el-radio>
-          <el-radio value="OFFLINE">下线</el-radio>
-        </el-radio-group>
-      </el-form-item>
-    </el-form>
+  <a-modal v-model:open="dialogOpen" :title="editingId ? '编辑公告' : '新建公告'" :width="560">
+    <a-form ref="formRef" :model="form" :rules="rules" :label-col="{ style: { width: '80px' } }">
+      <a-form-item label="标题" name="title">
+        <a-input v-model:value="form.title" :maxlength="50" show-count />
+      </a-form-item>
+      <a-form-item label="内容" name="content">
+        <a-textarea v-model:value="form.content" :rows="6" :maxlength="1000" show-count />
+      </a-form-item>
+      <a-form-item label="状态" name="status">
+        <a-radio-group v-model:value="form.status">
+          <a-radio value="DRAFT">草稿</a-radio>
+          <a-radio value="PUBLISHED">发布</a-radio>
+          <a-radio value="OFFLINE">下线</a-radio>
+        </a-radio-group>
+      </a-form-item>
+    </a-form>
     <template #footer>
-      <el-button @click="dialogVisible = false">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
+      <a-button @click="dialogOpen = false">取消</a-button>
+      <a-button type="primary" :loading="saving" @click="submit">保存</a-button>
     </template>
-  </el-dialog>
+  </a-modal>
 </template>
 
 <style scoped>
@@ -181,5 +183,11 @@ async function remove(row: AnnouncementRow): Promise<void> {
   margin-top: 12px;
   display: flex;
   justify-content: flex-end;
+}
+.op-link {
+  padding: 0;
+}
+.op-danger {
+  color: var(--sasu-color-danger);
 }
 </style>

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { confirm, message, prompt } from '@/composables/feedback';
 import type { NormalizedError } from '@/api/http';
 import { withdrawalsApi, type WithdrawalRow } from '@/api/withdrawals';
 import PageHeader from '@/components/PageHeader.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import PointsNum from '@/components/PointsNum.vue';
+import AppPagination from '@/components/AppPagination.vue';
+import type { TableColumnsType } from 'ant-design-vue';
 
 function errMsg(e: unknown): string {
   return (e as NormalizedError).friendlyMessage ?? '操作失败';
@@ -15,6 +17,19 @@ function errMsg(e: unknown): string {
 function fmtTime(value: string): string {
   return value ? new Date(value).toLocaleString('zh-CN') : '—';
 }
+
+const columns: TableColumnsType = [
+  { title: '学生', key: 'student', width: 110 },
+  { title: '学号', key: 'username', width: 130 },
+  { title: '班级', key: 'className', width: 130 },
+  { title: '积分', key: 'points', width: 100, align: 'right' },
+  { title: '现金', key: 'cash', width: 110, align: 'right' },
+  { title: '汇率', dataIndex: 'rate', key: 'rate', width: 100, align: 'right' },
+  { title: '申请月', dataIndex: 'periodKey', key: 'periodKey', width: 100, align: 'center' },
+  { title: '申请时间', key: 'appliedAt', width: 170 },
+  { title: '状态', key: 'status', width: 90 },
+  { title: '操作', key: 'action', width: 180, fixed: 'right' },
+];
 
 const TABS = [
   { status: 'PENDING', label: '待审批' },
@@ -41,7 +56,7 @@ async function load(): Promise<void> {
     items.value = data.items;
     total.value = data.total;
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     loading.value = false;
   }
@@ -52,67 +67,62 @@ watch(activeStatus, () => {
   void load();
 });
 
-function onPageChange(): void {
-  void load();
-}
-
 onMounted(() => void load());
 
 // ---------- 通过 ----------
 async function approve(row: WithdrawalRow): Promise<void> {
   try {
-    await ElMessageBox.confirm(
-      `确认通过 ${row.student?.name ?? row.studentId} 的提现申请吗？通过后进入待发放，等待线下现金发放。`,
-      '通过提现申请',
-      { confirmButtonText: '确认通过', cancelButtonText: '取消', type: 'warning' },
-    );
+    await confirm({
+      title: '通过提现申请',
+      content: `确认通过 ${row.student?.name ?? row.studentId} 的提现申请吗？通过后进入待发放，等待线下现金发放。`,
+      icon: 'warning',
+      okText: '确认通过',
+    });
     await withdrawalsApi.approve(row.id);
-    ElMessage.success('已通过，进入待发放');
+    message.success('已通过，进入待发放');
     void load();
   } catch (e) {
-    if (e !== 'cancel' && e !== 'close') ElMessage.error(errMsg(e));
+    if (e !== 'cancel' && e !== 'close') message.error(errMsg(e));
   }
 }
 
 // ---------- 驳回 ----------
 async function reject(row: WithdrawalRow): Promise<void> {
+  let reason: string;
   try {
-    const { value } = await ElMessageBox.prompt(
-      '驳回后冻结积分将退回学生可用余额，请填写驳回理由（必填，学生可见）。',
-      `驳回提现申请 #${row.id}`,
-      {
-        confirmButtonText: '确认驳回',
-        cancelButtonText: '取消',
-        inputPlaceholder: '请填写驳回理由',
-        inputValidator: (v: string) => (v && v.trim() ? true : '驳回理由不能为空'),
-      },
-    );
-    await withdrawalsApi.reject(row.id, value.trim());
-    ElMessage.success('已驳回，积分已退回');
+    reason = (
+      await prompt({
+        title: `驳回提现申请 #${row.id}`,
+        message: '驳回后冻结积分将退回学生可用余额，请填写驳回理由（必填，学生可见）。',
+        placeholder: '请填写驳回理由',
+        validate: (v: string) => (v && v.trim() ? true : '驳回理由不能为空'),
+      })
+    ).trim();
+    await withdrawalsApi.reject(row.id, reason);
+    message.success('已驳回，积分已退回');
     void load();
   } catch (e) {
-    if (e !== 'cancel' && e !== 'close') ElMessage.error(errMsg(e));
+    if (e !== 'cancel' && e !== 'close') message.error(errMsg(e));
   }
 }
 
 // ---------- 标记已发放 ----------
 async function markPaid(row: WithdrawalRow): Promise<void> {
+  let note: string;
   try {
-    const { value } = await ElMessageBox.prompt(
-      '请确认已线下现金发放，填写发放备注（如：现金签收单编号）。',
-      `标记已发放 #${row.id}`,
-      {
-        confirmButtonText: '确认发放',
-        cancelButtonText: '取消',
-        inputPlaceholder: '发放备注',
-        inputValidator: (v: string) => (v && v.trim() ? true : '发放备注不能为空'),
-      },
-    );
-    await withdrawalsApi.pay(row.id, value.trim(), crypto.randomUUID());
-    ElMessage.success('已标记发放');
+    note = (
+      await prompt({
+        title: `标记已发放 #${row.id}`,
+        message: '请确认已线下现金发放，填写发放备注（如：现金签收单编号）。',
+        placeholder: '发放备注',
+        validate: (v: string) => (v && v.trim() ? true : '发放备注不能为空'),
+      })
+    ).trim();
+    await withdrawalsApi.pay(row.id, note, crypto.randomUUID());
+    message.success('已标记发放');
     void load();
   } catch (e) {
-    if (e !== 'cancel' && e !== 'close') ElMessage.error(errMsg(e));
+    if (e !== 'cancel' && e !== 'close') message.error(errMsg(e));
   }
 }
 </script>
@@ -120,64 +130,47 @@ async function markPaid(row: WithdrawalRow): Promise<void> {
 <template>
   <PageHeader title="提现审批" subtitle="学生提现申请的审批、驳回与线下发放登记" />
 
-  <el-card shadow="never" class="block">
-    <el-tabs v-model="activeStatus">
-      <el-tab-pane v-for="tab in TABS" :key="tab.status" :name="tab.status" :label="tab.label" />
-    </el-tabs>
+  <a-card class="block">
+    <a-tabs v-model:active-key="activeStatus">
+      <a-tab-pane v-for="tab in TABS" :key="tab.status" :tab="tab.label" />
+    </a-tabs>
 
-    <el-table v-loading="loading" :data="items" stripe>
-      <el-table-column label="学生" width="110">
-        <template #default="{ row }">{{ row.student?.name ?? '—' }}</template>
-      </el-table-column>
-      <el-table-column label="学号" width="130">
-        <template #default="{ row }">{{ row.student?.username ?? row.studentId }}</template>
-      </el-table-column>
-      <el-table-column label="班级" width="130">
-        <template #default="{ row }">{{ row.student?.className ?? '—' }}</template>
-      </el-table-column>
-      <el-table-column label="积分" width="100" align="right">
-        <template #default="{ row }"><PointsNum :value="row.points" suffix="分" /></template>
-      </el-table-column>
-      <el-table-column label="现金" width="110" align="right">
-        <template #default="{ row }">¥ {{ row.cashAmount }}</template>
-      </el-table-column>
-      <el-table-column label="汇率" width="100" align="right">
-        <template #default="{ row }">{{ row.rate }}</template>
-      </el-table-column>
-      <el-table-column prop="periodKey" label="申请月" width="100" align="center" />
-      <el-table-column label="申请时间" width="170">
-        <template #default="{ row }">{{ fmtTime(row.appliedAt) }}</template>
-      </el-table-column>
-      <el-table-column label="状态" width="90">
-        <template #default="{ row }"><StatusTag :status="row.status" /></template>
-      </el-table-column>
-      <el-table-column label="操作" width="180" fixed="right">
-        <template #default="{ row }">
-          <template v-if="row.status === 'PENDING'">
-            <el-button link type="primary" size="small" @click="approve(row as WithdrawalRow)">通过</el-button>
-            <el-button link type="danger" size="small" @click="reject(row as WithdrawalRow)">驳回</el-button>
+    <a-table
+      :columns="columns"
+      :data-source="items"
+      :loading="loading"
+      :pagination="false"
+      row-key="id"
+      :scroll="{ x: 1250 }"
+    >
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'student'">{{ record.student?.name ?? '—' }}</template>
+        <template v-else-if="column.key === 'username'">{{ record.student?.username ?? record.studentId }}</template>
+        <template v-else-if="column.key === 'className'">{{ record.student?.className ?? '—' }}</template>
+        <template v-else-if="column.key === 'points'"><PointsNum class="num" :value="record.points" suffix="分" /></template>
+        <template v-else-if="column.key === 'cash'">¥ {{ record.cashAmount }}</template>
+        <template v-else-if="column.key === 'appliedAt'">{{ fmtTime(record.appliedAt) }}</template>
+        <template v-else-if="column.key === 'status'"><StatusTag :status="record.status" /></template>
+        <template v-else-if="column.key === 'action'">
+          <template v-if="record.status === 'PENDING'">
+            <a-button type="link" size="small" class="op-link" @click="approve(record as WithdrawalRow)">通过</a-button>
+            <a-button type="link" size="small" class="op-link op-danger" @click="reject(record as WithdrawalRow)">驳回</a-button>
           </template>
-          <el-button v-else-if="row.status === 'APPROVED'" link type="success" size="small" @click="markPaid(row as WithdrawalRow)">
+          <a-button v-else-if="record.status === 'APPROVED'" type="link" size="small" class="op-link op-success" @click="markPaid(record as WithdrawalRow)">
             标记已发放
-          </el-button>
-          <template v-else-if="row.status === 'REJECTED'">
-            <span class="reject-reason">{{ row.rejectReason ?? '—' }}</span>
+          </a-button>
+          <template v-else-if="record.status === 'REJECTED'">
+            <span class="reject-reason">{{ record.rejectReason ?? '—' }}</span>
           </template>
         </template>
-      </el-table-column>
-      <template #empty><EmptyState description="该状态下暂无申请" /></template>
-    </el-table>
+      </template>
+      <template #emptyText><EmptyState description="该状态下暂无申请" /></template>
+    </a-table>
 
     <div class="pager">
-      <el-pagination
-        v-model:current-page="page"
-        v-model:page-size="pageSize"
-        :total="total"
-        layout="total, prev, pager, next"
-        @current-change="onPageChange"
-      />
+      <AppPagination v-model:page="page" :page-size="pageSize" :total="total" @change="load" />
     </div>
-  </el-card>
+  </a-card>
 </template>
 
 <style scoped>
@@ -193,5 +186,14 @@ async function markPaid(row: WithdrawalRow): Promise<void> {
 .reject-reason {
   color: var(--sasu-text-secondary);
   font-size: 12px;
+}
+.op-link {
+  padding: 0;
+}
+.op-danger {
+  color: var(--sasu-color-danger);
+}
+.op-success {
+  color: var(--sasu-color-success);
 }
 </style>

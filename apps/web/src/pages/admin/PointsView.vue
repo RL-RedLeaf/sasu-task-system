@@ -4,13 +4,16 @@ function newIdemKey(): string {
 }
 
 import { onMounted, reactive, ref } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import type { FormInstance, FormRules } from 'element-plus';
+import { message, prompt } from '@/composables/feedback';
+import type { FormInstance } from 'ant-design-vue';
+import type { Rule } from 'ant-design-vue/es/form';
 import type { NormalizedError } from '@/api/http';
 import { pointsApi, type TxRow } from '@/api/points';
 import PageHeader from '@/components/PageHeader.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import PointsNum from '@/components/PointsNum.vue';
+import AppPagination from '@/components/AppPagination.vue';
+import type { TableColumnsType } from 'ant-design-vue';
 
 function errMsg(e: unknown): string {
   return (e as NormalizedError).friendlyMessage ?? '操作失败';
@@ -39,6 +42,11 @@ const TX_TYPE_LABELS: Record<string, string> = {
   ARBITRATION_PAY: '仲裁发放',
 };
 
+const violationColumns: TableColumnsType = [
+  { title: '不变式编号', dataIndex: 'invariant', key: 'invariant', width: 120 },
+  { title: '异常详情', dataIndex: 'detail', key: 'detail' },
+];
+
 // ---------- 积分池统计 ----------
 interface PoolStats {
   poolBalance: number;
@@ -56,7 +64,7 @@ async function loadPool(): Promise<void> {
   try {
     pool.value = await pointsApi.pool();
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     poolLoading.value = false;
   }
@@ -76,7 +84,7 @@ const topupFormRef = ref<FormInstance>();
 const topupLoading = ref(false);
 const topupForm = reactive({ amount: 1000, reason: '' });
 
-const topupRules: FormRules = {
+const topupRules: Record<string, Rule[]> = {
   amount: [{ required: true, message: '请输入金额', trigger: 'blur' }],
   reason: [{ required: true, message: '请填写操作原因', trigger: 'blur' }],
 };
@@ -84,17 +92,17 @@ const topupRules: FormRules = {
 async function submitTopup(): Promise<void> {
   await topupFormRef.value?.validate();
   if (topupForm.amount <= 0) {
-    ElMessage.warning('充值金额必须为正数');
+    message.warning('充值金额必须为正数');
     return;
   }
   topupLoading.value = true;
   try {
     await pointsApi.topup(topupForm.amount, topupForm.reason.trim(), newIdemKey());
-    ElMessage.success(`充值成功，积分池 +${topupForm.amount} 分`);
+    message.success(`充值成功，积分池 +${topupForm.amount} 分`);
     topupFormRef.value?.resetFields();
     void loadPool();
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     topupLoading.value = false;
   }
@@ -104,7 +112,7 @@ const adjustFormRef = ref<FormInstance>();
 const adjustLoading = ref(false);
 const adjustForm = reactive({ amount: 0, reason: '' });
 
-const adjustRules: FormRules = {
+const adjustRules: Record<string, Rule[]> = {
   amount: [{ required: true, message: '请输入调整金额（正数充值 / 负数核减）', trigger: 'blur' }],
   reason: [{ required: true, message: '请填写操作原因', trigger: 'blur' }],
 };
@@ -112,17 +120,17 @@ const adjustRules: FormRules = {
 async function submitAdjust(): Promise<void> {
   await adjustFormRef.value?.validate();
   if (adjustForm.amount === 0) {
-    ElMessage.warning('调整金额不能为 0');
+    message.warning('调整金额不能为 0');
     return;
   }
   adjustLoading.value = true;
   try {
     await pointsApi.adjust(adjustForm.amount, adjustForm.reason.trim(), newIdemKey());
-    ElMessage.success(`调整成功，积分池 ${adjustForm.amount > 0 ? '+' : ''}${adjustForm.amount} 分`);
+    message.success(`调整成功，积分池 ${adjustForm.amount > 0 ? '+' : ''}${adjustForm.amount} 分`);
     adjustFormRef.value?.resetFields();
     void loadPool();
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     adjustLoading.value = false;
   }
@@ -136,10 +144,18 @@ const userTxs = ref<TxRow[]>([]);
 const userTotal = ref(0);
 const userQueried = ref(false);
 
+const userTxColumns: TableColumnsType = [
+  { title: '时间', key: 'createdAt', width: 170 },
+  { title: '类型', key: 'type', width: 130 },
+  { title: '变动', key: 'delta', width: 110, align: 'right' },
+  { title: '变动后余额', key: 'balanceAfter', width: 120, align: 'right' },
+  { title: '原因', key: 'reason', ellipsis: true },
+];
+
 async function queryUser(page?: number): Promise<void> {
   const id = userQuery.userId.trim();
   if (!/^\d+$/.test(id)) {
-    ElMessage.warning('请输入数字用户 ID');
+    message.warning('请输入数字用户 ID');
     return;
   }
   if (page) userQuery.page = page;
@@ -151,7 +167,7 @@ async function queryUser(page?: number): Promise<void> {
     userTotal.value = data.total;
     userQueried.value = true;
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     userLoading.value = false;
   }
@@ -162,6 +178,13 @@ const allTxs = reactive({ page: 1, pageSize: 20, type: '' });
 const allLoading = ref(false);
 const allItems = ref<TxRow[]>([]);
 const allTotal = ref(0);
+
+const allTxColumns: TableColumnsType = [
+  { title: '时间', key: 'createdAt', width: 170 },
+  { title: '类型', key: 'type', width: 130 },
+  { title: '原因', key: 'reason', ellipsis: true },
+  { title: '分录', key: 'legs' },
+];
 
 async function loadAllTxs(): Promise<void> {
   allLoading.value = true;
@@ -174,17 +197,13 @@ async function loadAllTxs(): Promise<void> {
     allItems.value = data.items;
     allTotal.value = data.total;
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     allLoading.value = false;
   }
 }
 
 const allTypeOptions = Object.entries(TX_TYPE_LABELS).map(([value, label]) => ({ value, label }));
-
-function onPageChange(): void {
-  void loadAllTxs();
-}
 
 // ---------- 对账 ----------
 interface ReconcileResult {
@@ -199,7 +218,7 @@ async function loadReconcile(): Promise<void> {
   try {
     reconcile.value = await pointsApi.reconcile();
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     reconcileLoading.value = false;
   }
@@ -214,32 +233,30 @@ onMounted(() => {
 async function confirmUserAdjust(): Promise<void> {
   const id = userQuery.userId.trim();
   if (!/^\d+$/.test(id)) {
-    ElMessage.warning('请先输入数字用户 ID');
+    message.warning('请先输入数字用户 ID');
     return;
   }
   try {
-    const { value } = await ElMessageBox.prompt(
-      '请输入调整积分（正数发放 / 负数扣减，不能为 0）',
-      `调整用户 ${id} 的积分`,
-      {
-        confirmButtonText: '下一步',
-        cancelButtonText: '取消',
-        inputPattern: /^-?\d+$/,
-        inputErrorMessage: '请输入整数（可为负数）',
-      },
-    );
-    const amount = Number(value);
-    const { value: reason } = await ElMessageBox.prompt('请填写调整原因（必填）', '调整原因', {
-      confirmButtonText: '确认调整',
-      cancelButtonText: '取消',
-      inputPlaceholder: '如：纠错补偿、活动奖励',
-      inputValidator: (v: string) => (v && v.trim() ? true : '原因不能为空'),
+    const value = await prompt({
+      title: `调整用户 ${id} 的积分`,
+      message: '请输入调整积分（正数发放 / 负数扣减，不能为 0）',
+      placeholder: '整数，可为负数',
+      validate: (v: string) => (/^-?\d+$/.test(v.trim()) ? true : '请输入整数（可为负数）'),
     });
-    await pointsApi.adjustUser(id, amount, reason.trim(), newIdemKey());
-    ElMessage.success('调整成功');
+    const amount = Number(value.trim());
+    const reason = (
+      await prompt({
+        title: '调整原因',
+        message: '请填写调整原因（必填）',
+        placeholder: '如：纠错补偿、活动奖励',
+        validate: (v: string) => (v && v.trim() ? true : '原因不能为空'),
+      })
+    ).trim();
+    await pointsApi.adjustUser(id, amount, reason, newIdemKey());
+    message.success('调整成功');
     if (userQueried.value) void queryUser();
   } catch (e) {
-    if (e !== 'cancel' && e !== 'close') ElMessage.error(errMsg(e));
+    if (e !== 'cancel' && e !== 'close') message.error(errMsg(e));
   }
 }
 </script>
@@ -248,164 +265,160 @@ async function confirmUserAdjust(): Promise<void> {
   <PageHeader title="积分池管理" subtitle="积分发行与调账、用户积分查询、全量流水与账务对账" />
 
   <!-- 统计卡 -->
-  <el-row v-loading="poolLoading" :gutter="16">
-    <el-col v-for="card in poolCards" :key="card.key" :span="4">
-      <el-card shadow="never" class="block stat-card">
-        <div class="stat-label">{{ card.label }}</div>
-        <div class="stat-value"><PointsNum :value="pool?.[card.key] ?? 0" suffix="分" /></div>
-      </el-card>
-    </el-col>
-  </el-row>
+  <a-spin :spinning="poolLoading">
+    <a-row :gutter="16">
+      <a-col v-for="card in poolCards" :key="card.key" :span="4">
+        <a-card class="block stat-card">
+          <div class="stat-label">{{ card.label }}</div>
+          <div class="stat-value"><PointsNum :value="pool?.[card.key] ?? 0" suffix="分" /></div>
+        </a-card>
+      </a-col>
+    </a-row>
+  </a-spin>
 
   <!-- 充值 / 调整 -->
-  <el-row :gutter="16" class="mt16">
-    <el-col :span="12">
-      <el-card shadow="never" class="block">
-        <template #header>积分池充值</template>
-        <el-form ref="topupFormRef" :model="topupForm" :rules="topupRules" label-width="90px">
-          <el-form-item label="充值金额" prop="amount">
-            <el-input-number v-model="topupForm.amount" :min="1" :max="1000000" :precision="0" style="width: 200px" />
+  <a-row :gutter="16" class="mt16">
+    <a-col :span="12">
+      <a-card class="block" title="积分池充值">
+        <a-form ref="topupFormRef" :model="topupForm" :rules="topupRules" :label-col="{ style: { width: '90px' } }">
+          <a-form-item label="充值金额" name="amount">
+            <a-input-number v-model:value="topupForm.amount" :min="1" :max="1000000" :precision="0" style="width: 200px" />
             <span class="unit">分</span>
-          </el-form-item>
-          <el-form-item label="原因" prop="reason">
-            <el-input v-model="topupForm.reason" type="textarea" :rows="2" placeholder="必填，如：学期初预算入账" />
-          </el-form-item>
-          <el-button type="primary" :loading="topupLoading" @click="submitTopup">确认充值</el-button>
-        </el-form>
-      </el-card>
-    </el-col>
-    <el-col :span="12">
-      <el-card shadow="never" class="block">
-        <template #header>积分池调整（正数充值 / 负数核减）</template>
-        <el-form ref="adjustFormRef" :model="adjustForm" :rules="adjustRules" label-width="90px">
-          <el-form-item label="调整金额" prop="amount">
-            <el-input-number v-model="adjustForm.amount" :precision="0" style="width: 200px" />
+          </a-form-item>
+          <a-form-item label="原因" name="reason">
+            <a-textarea v-model:value="topupForm.reason" :rows="2" placeholder="必填，如：学期初预算入账" />
+          </a-form-item>
+          <a-button type="primary" :loading="topupLoading" @click="submitTopup">确认充值</a-button>
+        </a-form>
+      </a-card>
+    </a-col>
+    <a-col :span="12">
+      <a-card class="block" title="积分池调整（正数充值 / 负数核减）">
+        <a-form ref="adjustFormRef" :model="adjustForm" :rules="adjustRules" :label-col="{ style: { width: '90px' } }">
+          <a-form-item label="调整金额" name="amount">
+            <a-input-number v-model:value="adjustForm.amount" :precision="0" style="width: 200px" />
             <span class="unit">分（可为负数）</span>
-          </el-form-item>
-          <el-form-item label="原因" prop="reason">
-            <el-input v-model="adjustForm.reason" type="textarea" :rows="2" placeholder="必填，将记录到审计日志" />
-          </el-form-item>
-          <el-button type="warning" :loading="adjustLoading" @click="submitAdjust">确认调整</el-button>
-        </el-form>
-      </el-card>
-    </el-col>
-  </el-row>
+          </a-form-item>
+          <a-form-item label="原因" name="reason">
+            <a-textarea v-model:value="adjustForm.reason" :rows="2" placeholder="必填，将记录到审计日志" />
+          </a-form-item>
+          <a-button :loading="adjustLoading" @click="submitAdjust">确认调整</a-button>
+        </a-form>
+      </a-card>
+    </a-col>
+  </a-row>
 
   <!-- 学生积分查询 -->
-  <el-card shadow="never" class="block mt16">
-    <template #header>学生积分查询</template>
+  <a-card class="block mt16" title="学生积分查询">
     <div class="toolbar">
-      <el-input v-model="userQuery.userId" placeholder="输入用户 ID（数字）" style="width: 240px" @keyup.enter="queryUser()" />
-      <el-button type="primary" :loading="userLoading" @click="queryUser()">查询</el-button>
-      <el-button v-if="userQueried" @click="confirmUserAdjust">调整该用户积分</el-button>
+      <a-input v-model:value="userQuery.userId" placeholder="输入用户 ID（数字）" style="width: 240px" @keyup.enter="queryUser()" />
+      <a-button type="primary" :loading="userLoading" @click="queryUser()">查询</a-button>
+      <a-button v-if="userQueried" @click="confirmUserAdjust">调整该用户积分</a-button>
     </div>
     <template v-if="userQueried && userProfile">
-      <el-descriptions :column="3" border class="mt8">
-        <el-descriptions-item label="可用余额"><PointsNum :value="userProfile.balance" suffix="分" /></el-descriptions-item>
-        <el-descriptions-item label="冻结中"><PointsNum :value="userProfile.frozen" suffix="分" /></el-descriptions-item>
-        <el-descriptions-item label="欠分（违约）"><PointsNum :value="userProfile.penaltyDebt" suffix="分" /></el-descriptions-item>
-      </el-descriptions>
+      <a-descriptions :column="3" bordered class="mt8">
+        <a-descriptions-item label="可用余额"><PointsNum :value="userProfile.balance" suffix="分" /></a-descriptions-item>
+        <a-descriptions-item label="冻结中"><PointsNum :value="userProfile.frozen" suffix="分" /></a-descriptions-item>
+        <a-descriptions-item label="欠分（违约）"><PointsNum :value="userProfile.penaltyDebt" suffix="分" /></a-descriptions-item>
+      </a-descriptions>
 
-      <el-table v-loading="userLoading" :data="userTxs" size="small" stripe class="mt8" max-height="360">
-        <el-table-column label="时间" width="170">
-          <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>
-        </el-table-column>
-        <el-table-column label="类型" width="130">
-          <template #default="{ row }">{{ TX_TYPE_LABELS[row.type as string] ?? row.type }}</template>
-        </el-table-column>
-        <el-table-column label="变动" width="110" align="right">
-          <template #default="{ row }">
-            <span :class="row.legs?.[0]?.delta >= 0 ? 'ok-text' : 'bad-text'">
-              {{ row.legs?.[0]?.delta > 0 ? '+' : '' }}{{ row.legs?.[0]?.delta ?? 0 }}
+      <a-table
+        :columns="userTxColumns"
+        :data-source="userTxs"
+        :loading="userLoading"
+        size="small"
+        :pagination="false"
+        class="mt8"
+        :scroll="{ y: 360 }"
+        row-key="id"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'createdAt'">{{ fmtTime(record.createdAt) }}</template>
+          <template v-else-if="column.key === 'type'">{{ TX_TYPE_LABELS[record.type as string] ?? record.type }}</template>
+          <template v-else-if="column.key === 'delta'">
+            <span class="num" :class="record.legs?.[0]?.delta >= 0 ? 'ok-text' : 'bad-text'">
+              {{ record.legs?.[0]?.delta > 0 ? '+' : '' }}{{ record.legs?.[0]?.delta ?? 0 }}
             </span>
           </template>
-        </el-table-column>
-        <el-table-column label="变动后余额" width="120" align="right">
-          <template #default="{ row }">{{ row.legs?.[0]?.balanceAfter ?? '—' }}</template>
-        </el-table-column>
-        <el-table-column prop="reason" label="原因" min-width="180">
-          <template #default="{ row }">{{ row.reason ?? '—' }}</template>
-        </el-table-column>
-        <template #empty><EmptyState description="该用户暂无流水" /></template>
-      </el-table>
+          <template v-else-if="column.key === 'balanceAfter'">
+            <span class="num">{{ record.legs?.[0]?.balanceAfter ?? '—' }}</span>
+          </template>
+          <template v-else-if="column.key === 'reason'">{{ record.reason ?? '—' }}</template>
+        </template>
+        <template #emptyText><EmptyState description="该用户暂无流水" /></template>
+      </a-table>
       <div class="pager">
-        <el-pagination
-          v-model:current-page="userQuery.page"
+        <AppPagination
+          v-model:page="userQuery.page"
           :page-size="userQuery.pageSize"
           :total="userTotal"
-          layout="total, prev, pager, next"
-          @current-change="(p: number) => queryUser(p)"
+          @change="(p: number) => queryUser(p)"
         />
       </div>
     </template>
-  </el-card>
+  </a-card>
 
   <!-- 全量流水 -->
-  <el-card shadow="never" class="block mt16">
-    <template #header>
+  <a-card class="block mt16">
+    <template #title>
       <div class="card-header-row">
         <span>全量流水</span>
-        <el-select v-model="allTxs.type" placeholder="全部类型" clearable style="width: 180px" @change="allTxs.page = 1; loadAllTxs()">
-          <el-option v-for="opt in allTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
-        </el-select>
+        <a-select
+          v-model:value="allTxs.type"
+          placeholder="全部类型"
+          allow-clear
+          style="width: 180px"
+          :options="allTypeOptions"
+          @change="allTxs.page = 1; loadAllTxs()"
+        />
       </div>
     </template>
-    <el-table v-loading="allLoading" :data="allItems" stripe>
-      <el-table-column label="时间" width="170">
-        <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>
-      </el-table-column>
-      <el-table-column label="类型" width="130">
-        <template #default="{ row }">{{ TX_TYPE_LABELS[row.type as string] ?? row.type }}</template>
-      </el-table-column>
-      <el-table-column prop="reason" label="事由" min-width="180" show-overflow-tooltip><template #default="{ row }">{{ row.reason || '—' }}</template></el-table-column>
-      <el-table-column prop="reason" label="原因" min-width="160" show-overflow-tooltip>
-        <template #default="{ row }">{{ row.reason ?? '—' }}</template>
-      </el-table-column>
-      <el-table-column label="分录" min-width="220">
-        <template #default="{ row }">
-          <div v-for="(leg, i) in row.legs" :key="i" class="leg-line">
+    <a-table
+      :columns="allTxColumns"
+      :data-source="allItems"
+      :loading="allLoading"
+      :pagination="false"
+      row-key="id"
+    >
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'createdAt'">{{ fmtTime(record.createdAt) }}</template>
+        <template v-else-if="column.key === 'type'">{{ TX_TYPE_LABELS[record.type as string] ?? record.type }}</template>
+        <template v-else-if="column.key === 'reason'">{{ record.reason || '—' }}</template>
+        <template v-else-if="column.key === 'legs'">
+          <div v-for="(leg, i) in record.legs" :key="i" class="leg-line">
             {{ leg.bucket === 'FROZEN' ? '[冻结]' : '' }}{{ leg.delta > 0 ? '+' : '' }}{{ leg.delta }}
             <span class="leg-after">→ {{ leg.balanceAfter }}</span>
           </div>
         </template>
-      </el-table-column>
-      <template #empty><EmptyState /></template>
-    </el-table>
+      </template>
+      <template #emptyText><EmptyState /></template>
+    </a-table>
     <div class="pager">
-      <el-pagination
-        v-model:current-page="allTxs.page"
-        v-model:page-size="allTxs.pageSize"
-        :total="allTotal"
-        layout="total, prev, pager, next"
-        @current-change="onPageChange"
-      />
+      <AppPagination v-model:page="allTxs.page" :page-size="allTxs.pageSize" :total="allTotal" @change="loadAllTxs" />
     </div>
-  </el-card>
+  </a-card>
 
   <!-- 对账 -->
-  <el-card shadow="never" class="block mt16">
-    <template #header>
+  <a-card class="block mt16">
+    <template #title>
       <div class="card-header-row">
         <span>积分账务对账</span>
-        <el-button size="small" :loading="reconcileLoading" @click="loadReconcile">重新对账</el-button>
+        <a-button size="small" :loading="reconcileLoading" @click="loadReconcile">重新对账</a-button>
       </div>
     </template>
     <template v-if="reconcile">
-      <el-result
+      <a-result
         v-if="reconcile.ok"
-        icon="success"
+        status="success"
         title="账务全部一致"
         sub-title="积分池、托管、用户账户与流水全部满足守恒不变式"
       />
       <template v-else>
-        <el-alert type="error" :closable="false" title="对账发现异常，以下不变式被破坏" show-icon />
-        <el-table :data="reconcile.violations" class="mt8">
-          <el-table-column prop="invariant" label="不变式编号" width="120" />
-          <el-table-column prop="detail" label="异常详情" />
-        </el-table>
+        <a-alert type="error" message="对账发现异常，以下不变式被破坏" show-icon />
+        <a-table :columns="violationColumns" :data-source="reconcile.violations" :pagination="false" class="mt8" row-key="invariant" />
       </template>
     </template>
-  </el-card>
+  </a-card>
 </template>
 
 <style scoped>

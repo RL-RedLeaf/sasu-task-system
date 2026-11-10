@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { message } from '@/composables/feedback';
 import type { NormalizedError } from '@/api/http';
 import { settingsApi, type ConfigRow } from '@/api/admin';
 import PageHeader from '@/components/PageHeader.vue';
 import EmptyState from '@/components/EmptyState.vue';
+import type { TableColumnsType } from 'ant-design-vue';
 
 function errMsg(e: unknown): string {
   return (e as NormalizedError).friendlyMessage ?? '操作失败';
@@ -19,7 +20,7 @@ async function load(): Promise<void> {
     const data = await settingsApi.list();
     items.value = data.items;
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     loading.value = false;
   }
@@ -85,6 +86,12 @@ function valueText(row: ConfigRow): string {
   return row.value;
 }
 
+const paramColumns: TableColumnsType = [
+  { title: '参数', key: 'param' },
+  { title: '当前值', key: 'value', width: 220 },
+  { title: '操作', key: 'action', width: 100, fixed: 'right' },
+];
+
 const groups = computed(() => {
   const used = new Set<string>();
   const result: { title: string; rows: ConfigRow[] }[] = [];
@@ -105,7 +112,7 @@ const valueTypeHints: Record<string, string> = {
 };
 
 // ---------- 编辑 ----------
-const dialogVisible = ref(false);
+const dialogOpen = ref(false);
 const saving = ref(false);
 const editing = ref<ConfigRow | null>(null);
 const editForm = reactive({ value: '' });
@@ -113,7 +120,7 @@ const editForm = reactive({ value: '' });
 function openEdit(row: ConfigRow): void {
   editing.value = row;
   editForm.value = row.value;
-  dialogVisible.value = true;
+  dialogOpen.value = true;
 }
 
 async function submitEdit(): Promise<void> {
@@ -121,21 +128,21 @@ async function submitEdit(): Promise<void> {
   const v = editForm.value;
   const t = editing.value.valueType;
   if (t === 'INT' && !/^-?\d+$/.test(v.trim())) {
-    ElMessage.warning('该配置要求整数格式');
+    message.warning('该配置要求整数格式');
     return;
   }
   if (t === 'DECIMAL' && !/^-?\d+(\.\d+)?$/.test(v.trim())) {
-    ElMessage.warning('该配置要求小数格式');
+    message.warning('该配置要求小数格式');
     return;
   }
   saving.value = true;
   try {
     await settingsApi.update(editing.value.key, v.trim());
-    ElMessage.success(`已保存 ${editing.value.key}`);
-    dialogVisible.value = false;
+    message.success(`已保存 ${editing.value.key}`);
+    dialogOpen.value = false;
     void load();
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     saving.value = false;
   }
@@ -145,71 +152,61 @@ async function submitEdit(): Promise<void> {
 <template>
   <PageHeader title="系统参数设置" subtitle="提现 / 任务 / 安全 / 保留期等运行参数，修改即时生效" />
 
-  <div v-loading="loading">
-    <el-card
+  <a-spin :spinning="loading">
+    <a-card
       v-for="group in groups"
       :key="group.title"
-      shadow="never"
       class="block"
       :class="{ mt16: group.title !== groups[0]?.title }"
+      :title="group.title"
     >
-      <template #header>{{ group.title }}</template>
-      <el-table :data="group.rows" stripe>
-        <el-table-column label="参数" min-width="300">
-          <template #default="{ row }">
+      <a-table :columns="paramColumns" :data-source="group.rows" :pagination="false" row-key="key">
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'param'">
             <div class="param-name">
-              {{ paramNames[row.key] ?? row.description ?? row.key }}
-              <el-tooltip
-                v-if="row.key === 'POINT_TO_CASH_RATE'"
-                content="0 表示提现关闭；改为大于 0 的小数后自动开放学生提现入口"
-                placement="top"
-              >
-                <el-tag type="danger" size="small" class="warn-tag">0 表示提现关闭</el-tag>
-              </el-tooltip>
+              {{ paramNames[record.key] ?? record.description ?? record.key }}
+              <a-tooltip v-if="record.key === 'POINT_TO_CASH_RATE'" title="0 表示提现关闭；改为大于 0 的小数后自动开放学生提现入口">
+                <a-tag color="error" class="warn-tag">0 表示提现关闭</a-tag>
+              </a-tooltip>
             </div>
-            <div class="param-key mono">{{ row.key }}</div>
+            <div class="param-key mono">{{ record.key }}</div>
           </template>
-        </el-table-column>
-        <el-table-column label="当前值" width="220">
-          <template #default="{ row }">
-            <span class="mono">{{ valueText(row as ConfigRow) }}</span>
+          <template v-else-if="column.key === 'value'">
+            <span class="mono">{{ valueText(record as ConfigRow) }}</span>
           </template>
-        </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openEdit(row as ConfigRow)">编辑</el-button>
+          <template v-else-if="column.key === 'action'">
+            <a-button type="link" size="small" class="op-link" @click="openEdit(record as ConfigRow)">编辑</a-button>
           </template>
-        </el-table-column>
-        <template #empty><EmptyState /></template>
-      </el-table>
-    </el-card>
-  </div>
+        </template>
+        <template #emptyText><EmptyState /></template>
+      </a-table>
+    </a-card>
+  </a-spin>
 
-  <el-dialog v-model="dialogVisible" :title="editing ? `编辑：${paramNames[editing.key] ?? editing.key}` : '编辑参数'" width="480px">
+  <a-modal v-model:open="dialogOpen" :title="editing ? `编辑：${paramNames[editing.key] ?? editing.key}` : '编辑参数'" :width="480">
     <template v-if="editing">
-      <el-alert
+      <a-alert
         v-if="editing.key === 'POINT_TO_CASH_RATE'"
         type="warning"
-        :closable="false"
         show-icon
         class="mb8"
-        title="0 表示提现关闭；修改前请确认不存在待审批/待发放的提现记录。"
+        message="0 表示提现关闭；修改前请确认不存在待审批/待发放的提现记录。"
       />
-      <el-form label-width="90px" @submit.prevent>
-        <el-form-item label="当前值">
+      <a-form :label-col="{ style: { width: '90px' } }" @submit.prevent>
+        <a-form-item label="当前值">
           <span class="mono">{{ editing.value }}</span>
-        </el-form-item>
-        <el-form-item :label="`新值（${valueTypeHints[editing.valueType] ?? editing.valueType}）`">
-          <el-input v-model="editForm.value" :placeholder="valueTypeHints[editing.valueType] ?? '请输入新值'" />
-        </el-form-item>
+        </a-form-item>
+        <a-form-item :label="`新值（${valueTypeHints[editing.valueType] ?? editing.valueType}）`">
+          <a-input v-model:value="editForm.value" :placeholder="valueTypeHints[editing.valueType] ?? '请输入新值'" />
+        </a-form-item>
         <p v-if="editing.description" class="tip">{{ editing.description }}</p>
-      </el-form>
+      </a-form>
     </template>
     <template #footer>
-      <el-button @click="dialogVisible = false">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="submitEdit">保存</el-button>
+      <a-button @click="dialogOpen = false">取消</a-button>
+      <a-button type="primary" :loading="saving" @click="submitEdit">保存</a-button>
     </template>
-  </el-dialog>
+  </a-modal>
 </template>
 
 <style scoped>
@@ -244,5 +241,8 @@ async function submitEdit(): Promise<void> {
   color: var(--sasu-text-secondary);
   font-size: 12px;
   margin: 0 0 0 12px;
+}
+.op-link {
+  padding: 0;
 }
 </style>

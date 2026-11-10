@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import type { FormInstance, FormRules } from 'element-plus';
+import { confirm, message } from '@/composables/feedback';
+import type { FormInstance } from 'ant-design-vue';
+import type { Rule } from 'ant-design-vue/es/form';
 import type { NormalizedError } from '@/api/http';
 import { disputesApi, type DisputeRow } from '@/api/withdrawals';
 import PageHeader from '@/components/PageHeader.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import PointsNum from '@/components/PointsNum.vue';
+import AppPagination from '@/components/AppPagination.vue';
+import type { TableColumnsType } from 'ant-design-vue';
 
 function errMsg(e: unknown): string {
   return (e as NormalizedError).friendlyMessage ?? '操作失败';
@@ -23,6 +26,17 @@ function truncate(text: string, len = 40): string {
 }
 
 const router = useRouter();
+
+const columns: TableColumnsType = [
+  { title: '发起人', key: 'initiator', width: 130 },
+  { title: '角色', key: 'role', width: 80 },
+  { title: '被诉方', key: 'respondent', width: 130 },
+  { title: '关联任务', key: 'taskId', width: 110 },
+  { title: '理由', key: 'reason' },
+  { title: '状态', key: 'status', width: 90 },
+  { title: '时间', key: 'createdAt', width: 170 },
+  { title: '操作', key: 'action', width: 140, fixed: 'right' },
+];
 
 const TABS = [
   { status: 'OPEN', label: '待处理' },
@@ -50,7 +64,7 @@ async function load(): Promise<void> {
     items.value = data.items;
     total.value = data.total;
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     loading.value = false;
   }
@@ -61,19 +75,15 @@ watch(activeStatus, () => {
   void load();
 });
 
-function onPageChange(): void {
-  void load();
-}
-
 onMounted(() => void load());
 
 // ---------- 详情抽屉 ----------
-const drawerVisible = ref(false);
+const drawerOpen = ref(false);
 const detail = ref<DisputeRow | null>(null);
 
 function openDetail(row: DisputeRow): void {
   detail.value = row;
-  drawerVisible.value = true;
+  drawerOpen.value = true;
 }
 
 function goTask(taskId: string | null): void {
@@ -81,21 +91,21 @@ function goTask(taskId: string | null): void {
 }
 
 // ---------- 裁定 ----------
-const resolveVisible = ref(false);
+const resolveOpen = ref(false);
 const resolveFormRef = ref<FormInstance>();
 const resolveLoading = ref(false);
 const resolveTask = ref<DisputeRow | null>(null);
 const resolveForm = reactive({ decision: 'PAY_FULL', payPoints: 0, note: '' });
 
-const resolveRules: FormRules = {
+const resolveRules: Record<string, Rule[]> = {
   decision: [{ required: true, message: '请选择裁定结果', trigger: 'change' }],
 };
 
 function openResolve(row: DisputeRow): void {
   resolveTask.value = row;
   Object.assign(resolveForm, { decision: 'PAY_FULL', payPoints: 0, note: '' });
-  drawerVisible.value = false;
-  resolveVisible.value = true;
+  drawerOpen.value = false;
+  resolveOpen.value = true;
 }
 
 const decisionLabels: Record<string, string> = {
@@ -109,16 +119,18 @@ async function submitResolve(): Promise<void> {
   await resolveFormRef.value?.validate();
   if (resolveForm.decision === 'PAY_PARTIAL') {
     if (!Number.isInteger(resolveForm.payPoints) || resolveForm.payPoints <= 0) {
-      ElMessage.warning('部分发放需输入大于 0 的整数积分');
+      message.warning('部分发放需输入大于 0 的整数积分');
       return;
     }
   }
   try {
-    await ElMessageBox.confirm(
-      `确认按「${decisionLabels[resolveForm.decision]}」裁定该仲裁吗？裁定会立即执行并通知双方。`,
-      '确认裁定',
-      { confirmButtonText: '确认裁定', cancelButtonText: '再想想', type: 'warning' },
-    );
+    await confirm({
+      title: '确认裁定',
+      content: `确认按「${decisionLabels[resolveForm.decision]}」裁定该仲裁吗？裁定会立即执行并通知双方。`,
+      icon: 'warning',
+      okText: '确认裁定',
+      cancelText: '再想想',
+    });
   } catch {
     return;
   }
@@ -129,11 +141,11 @@ async function submitResolve(): Promise<void> {
       payPoints: resolveForm.decision === 'PAY_PARTIAL' ? resolveForm.payPoints : undefined,
       resolutionNote: resolveForm.note.trim() || undefined,
     });
-    ElMessage.success('裁定完成');
-    resolveVisible.value = false;
+    message.success('裁定完成');
+    resolveOpen.value = false;
     void load();
   } catch (e) {
-    ElMessage.error(errMsg(e));
+    message.error(errMsg(e));
   } finally {
     resolveLoading.value = false;
   }
@@ -143,111 +155,98 @@ async function submitResolve(): Promise<void> {
 <template>
   <PageHeader title="仲裁处理" subtitle="学生/教师发起的仲裁裁定：全额发放、部分发放或驳回" />
 
-  <el-card shadow="never" class="block">
-    <el-tabs v-model="activeStatus">
-      <el-tab-pane v-for="tab in TABS" :key="tab.status" :name="tab.status" :label="tab.label" />
-    </el-tabs>
+  <a-card class="block">
+    <a-tabs v-model:active-key="activeStatus">
+      <a-tab-pane v-for="tab in TABS" :key="tab.status" :tab="tab.label" />
+    </a-tabs>
 
-    <el-table v-loading="loading" :data="items" stripe>
-      <el-table-column label="发起人" width="130">
-        <template #default="{ row }">{{ row.initiator?.name ?? row.initiatorId }}</template>
-      </el-table-column>
-      <el-table-column label="角色" width="80">
-        <template #default="{ row }">{{ roleLabels[row.initiatorRole] ?? row.initiatorRole }}</template>
-      </el-table-column>
-      <el-table-column label="被诉方" width="130">
-        <template #default="{ row }">{{ row.respondent?.name ?? row.respondentId }}</template>
-      </el-table-column>
-      <el-table-column label="关联任务" width="110">
-        <template #default="{ row }">
-          <el-link v-if="row.taskId" type="primary" :underline="false" @click="goTask(row.taskId)">#{{ row.taskId }}</el-link>
+    <a-table
+      :columns="columns"
+      :data-source="items"
+      :loading="loading"
+      :pagination="false"
+      row-key="id"
+      :scroll="{ x: 950 }"
+    >
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'initiator'">{{ record.initiator?.name ?? record.initiatorId }}</template>
+        <template v-else-if="column.key === 'role'">{{ roleLabels[record.initiatorRole] ?? record.initiatorRole }}</template>
+        <template v-else-if="column.key === 'respondent'">{{ record.respondent?.name ?? record.respondentId }}</template>
+        <template v-else-if="column.key === 'taskId'">
+          <a-button v-if="record.taskId" type="link" class="op-link" @click="goTask(record.taskId)">#{{ record.taskId }}</a-button>
           <span v-else>—</span>
         </template>
-      </el-table-column>
-      <el-table-column label="理由" min-width="200">
-        <template #default="{ row }">
-          <span class="reason">{{ truncate(row.reason) }}</span>
+        <template v-else-if="column.key === 'reason'">
+          <span class="reason">{{ truncate(record.reason) }}</span>
         </template>
-      </el-table-column>
-      <el-table-column label="状态" width="90">
-        <template #default="{ row }"><StatusTag :status="row.status" /></template>
-      </el-table-column>
-      <el-table-column label="时间" width="170">
-        <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="140" fixed="right">
-        <template #default="{ row }">
-          <el-button link type="primary" size="small" @click="openDetail(row as DisputeRow)">详情</el-button>
-          <el-button v-if="row.status === 'OPEN'" link type="warning" size="small" @click="openResolve(row as DisputeRow)">裁定</el-button>
+        <template v-else-if="column.key === 'status'"><StatusTag :status="record.status" /></template>
+        <template v-else-if="column.key === 'createdAt'">{{ fmtTime(record.createdAt) }}</template>
+        <template v-else-if="column.key === 'action'">
+          <a-button type="link" size="small" class="op-link" @click="openDetail(record as DisputeRow)">详情</a-button>
+          <a-button v-if="record.status === 'OPEN'" type="link" size="small" class="op-link op-warning" @click="openResolve(record as DisputeRow)">裁定</a-button>
         </template>
-      </el-table-column>
-      <template #empty><EmptyState description="该状态下暂无仲裁" /></template>
-    </el-table>
+      </template>
+      <template #emptyText><EmptyState description="该状态下暂无仲裁" /></template>
+    </a-table>
 
     <div class="pager">
-      <el-pagination
-        v-model:current-page="page"
-        v-model:page-size="pageSize"
-        :total="total"
-        layout="total, prev, pager, next"
-        @current-change="onPageChange"
-      />
+      <AppPagination v-model:page="page" :page-size="pageSize" :total="total" @change="load" />
     </div>
-  </el-card>
+  </a-card>
 
   <!-- 详情抽屉 -->
-  <el-drawer v-model="drawerVisible" title="仲裁详情" size="440px">
+  <a-drawer v-model:open="drawerOpen" title="仲裁详情" :width="440">
     <template v-if="detail">
-      <el-descriptions :column="1" border>
-        <el-descriptions-item label="编号">#{{ detail.id }}</el-descriptions-item>
-        <el-descriptions-item label="发起人">
+      <a-descriptions :column="1" bordered>
+        <a-descriptions-item label="编号">#{{ detail.id }}</a-descriptions-item>
+        <a-descriptions-item label="发起人">
           {{ detail.initiator?.name ?? detail.initiatorId }}（{{ roleLabels[detail.initiatorRole] ?? detail.initiatorRole }}）
-        </el-descriptions-item>
-        <el-descriptions-item label="被诉方">
+        </a-descriptions-item>
+        <a-descriptions-item label="被诉方">
           {{ detail.respondent?.name ?? detail.respondentId }}（{{ roleLabels[detail.respondent?.role ?? ''] ?? detail.respondent?.role ?? '—' }}）
-        </el-descriptions-item>
-        <el-descriptions-item label="关联任务">
-          <el-link v-if="detail.taskId" type="primary" :underline="false" @click="goTask(detail.taskId)">#{{ detail.taskId }}</el-link>
+        </a-descriptions-item>
+        <a-descriptions-item label="关联任务">
+          <a-button v-if="detail.taskId" type="link" class="op-link" @click="goTask(detail.taskId)">#{{ detail.taskId }}</a-button>
           <span v-else>—</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="状态"><StatusTag :status="detail.status" /></el-descriptions-item>
-        <el-descriptions-item label="发起时间">{{ fmtTime(detail.createdAt) }}</el-descriptions-item>
-        <el-descriptions-item label="仲裁理由">{{ detail.reason }}</el-descriptions-item>
-        <el-descriptions-item v-if="detail.decision" label="裁定结果">
+        </a-descriptions-item>
+        <a-descriptions-item label="状态"><StatusTag :status="detail.status" /></a-descriptions-item>
+        <a-descriptions-item label="发起时间">{{ fmtTime(detail.createdAt) }}</a-descriptions-item>
+        <a-descriptions-item label="仲裁理由">{{ detail.reason }}</a-descriptions-item>
+        <a-descriptions-item v-if="detail.decision" label="裁定结果">
           {{ decisionLabels[detail.decision] ?? detail.decision }}
           <template v-if="detail.payPoints !== null">（<PointsNum :value="detail.payPoints" suffix="分" />）</template>
-        </el-descriptions-item>
-        <el-descriptions-item v-if="detail.resolutionNote" label="处理说明">{{ detail.resolutionNote }}</el-descriptions-item>
-      </el-descriptions>
+        </a-descriptions-item>
+        <a-descriptions-item v-if="detail.resolutionNote" label="处理说明">{{ detail.resolutionNote }}</a-descriptions-item>
+      </a-descriptions>
       <div v-if="detail.status === 'OPEN'" class="drawer-actions">
-        <el-button type="primary" @click="openResolve(detail)">去裁定</el-button>
+        <a-button type="primary" @click="openResolve(detail)">去裁定</a-button>
       </div>
     </template>
-  </el-drawer>
+  </a-drawer>
 
   <!-- 裁定对话框 -->
-  <el-dialog v-model="resolveVisible" :title="resolveTask ? `裁定仲裁 #${resolveTask.id}` : '裁定仲裁'" width="480px">
-    <el-form ref="resolveFormRef" :model="resolveForm" :rules="resolveRules" label-width="100px">
-      <el-form-item label="裁定结果" prop="decision">
-        <el-radio-group v-model="resolveForm.decision">
-          <el-radio value="PAY_FULL">全额发放</el-radio>
-          <el-radio value="PAY_PARTIAL">部分发放</el-radio>
-          <el-radio value="REJECT">驳回</el-radio>
-        </el-radio-group>
-      </el-form-item>
-      <el-form-item v-if="resolveForm.decision === 'PAY_PARTIAL'" label="发放积分">
-        <el-input-number v-model="resolveForm.payPoints" :min="1" :precision="0" style="width: 200px" />
+  <a-modal v-model:open="resolveOpen" :title="resolveTask ? `裁定仲裁 #${resolveTask.id}` : '裁定仲裁'" :width="480">
+    <a-form ref="resolveFormRef" :model="resolveForm" :rules="resolveRules" :label-col="{ style: { width: '100px' } }">
+      <a-form-item label="裁定结果" name="decision">
+        <a-radio-group v-model:value="resolveForm.decision">
+          <a-radio value="PAY_FULL">全额发放</a-radio>
+          <a-radio value="PAY_PARTIAL">部分发放</a-radio>
+          <a-radio value="REJECT">驳回</a-radio>
+        </a-radio-group>
+      </a-form-item>
+      <a-form-item v-if="resolveForm.decision === 'PAY_PARTIAL'" label="发放积分">
+        <a-input-number v-model:value="resolveForm.payPoints" :min="1" :precision="0" style="width: 200px" />
         <span class="unit">分</span>
-      </el-form-item>
-      <el-form-item label="处理说明">
-        <el-input v-model="resolveForm.note" type="textarea" :rows="3" placeholder="将通知双方（选填）" />
-      </el-form-item>
-    </el-form>
+      </a-form-item>
+      <a-form-item label="处理说明">
+        <a-textarea v-model:value="resolveForm.note" :rows="3" placeholder="将通知双方（选填）" />
+      </a-form-item>
+    </a-form>
     <template #footer>
-      <el-button @click="resolveVisible = false">取消</el-button>
-      <el-button type="primary" :loading="resolveLoading" @click="submitResolve">确认裁定</el-button>
+      <a-button @click="resolveOpen = false">取消</a-button>
+      <a-button type="primary" :loading="resolveLoading" @click="submitResolve">确认裁定</a-button>
     </template>
-  </el-dialog>
+  </a-modal>
 </template>
 
 <style scoped>
@@ -270,5 +269,11 @@ async function submitResolve(): Promise<void> {
   margin-left: 8px;
   color: var(--sasu-text-secondary);
   font-size: 12px;
+}
+.op-link {
+  padding: 0;
+}
+.op-warning {
+  color: var(--sasu-color-warning);
 }
 </style>

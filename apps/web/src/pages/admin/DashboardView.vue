@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { message } from '@/composables/feedback';
 import type { NormalizedError } from '@/api/http';
 import { pointsApi } from '@/api/points';
 import { statsApi } from '@/api/admin';
 import { tasksApi } from '@/api/tasks';
 import PageHeader from '@/components/PageHeader.vue';
 import PointsNum from '@/components/PointsNum.vue';
+import type { TableColumnsType } from 'ant-design-vue';
 
 const router = useRouter();
 
@@ -34,6 +35,11 @@ interface ReconcileResult {
 }
 const reconcile = ref<ReconcileResult | null>(null);
 const reconcileLoading = ref(false);
+
+const violationColumns: TableColumnsType = [
+  { title: '不变式编号', dataIndex: 'invariant', key: 'invariant', width: 120 },
+  { title: '异常详情', dataIndex: 'detail', key: 'detail' },
+];
 
 const statCards = computed(() => {
   const o = overview.value;
@@ -85,7 +91,7 @@ async function loadOverview(): Promise<void> {
   try {
     overview.value = await statsApi.overview();
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '操作失败');
+    message.error((e as NormalizedError).friendlyMessage ?? '操作失败');
   } finally {
     loading.value = false;
   }
@@ -96,7 +102,7 @@ async function loadReconcile(): Promise<void> {
   try {
     reconcile.value = await pointsApi.reconcile();
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '操作失败');
+    message.error((e as NormalizedError).friendlyMessage ?? '操作失败');
   } finally {
     reconcileLoading.value = false;
   }
@@ -114,9 +120,9 @@ async function runJob(job: string): Promise<void> {
   jobRunning.value = job;
   try {
     await tasksApi.runJob(job);
-    ElMessage.success('作业执行成功');
+    message.success('作业执行成功');
   } catch (e) {
-    ElMessage.error((e as NormalizedError).friendlyMessage ?? '操作失败');
+    message.error((e as NormalizedError).friendlyMessage ?? '操作失败');
   } finally {
     jobRunning.value = null;
   }
@@ -134,10 +140,10 @@ onMounted(() => {
 
 <template>
   <PageHeader title="管理端仪表盘" subtitle="待办概览、账务对账与运维工具" />
-  <div v-loading="loading">
+  <a-spin :spinning="loading">
     <!-- 待办统计卡 -->
-    <el-row :gutter="16">
-      <el-col v-for="card in statCards" :key="card.label" :span="6">
+    <a-row :gutter="16">
+      <a-col v-for="card in statCards" :key="card.label" :span="6">
         <div class="stat-card" :class="{ alert: card.value > 0 }" @click="goPage(card.to)">
           <div class="stat-value" :class="{ danger: card.value > 0 }">
             <PointsNum :value="card.value" />
@@ -145,109 +151,103 @@ onMounted(() => {
           <div class="stat-label">{{ card.label }}</div>
           <div v-if="card.value > 0" class="stat-tip">点击前往处理</div>
         </div>
-      </el-col>
-    </el-row>
+      </a-col>
+    </a-row>
 
-    <el-row :gutter="16" class="mt16">
-      <el-col :span="12">
-        <el-card shadow="never" class="block">
-          <template #header>任务状态分布</template>
-          <el-empty v-if="taskStatusRows.length === 0" description="暂无任务" :image-size="80" />
+    <a-row :gutter="16" class="mt16 dash-row">
+      <a-col :span="12">
+        <a-card class="block" title="任务状态分布">
+          <a-empty v-if="taskStatusRows.length === 0" description="暂无任务" />
           <div v-for="row in taskStatusRows" :key="row.status" class="dist-row">
             <span class="dist-label">{{ row.label }}</span>
-            <el-progress
+            <a-progress
               class="dist-bar"
-              :percentage="row.percent"
+              :percent="row.percent"
               :stroke-width="14"
-              :show-text="false"
+              :show-info="false"
+              stroke-color="var(--sasu-color-primary)"
             />
             <span class="dist-count"><PointsNum :value="row.count" /></span>
           </div>
-        </el-card>
-      </el-col>
-      <el-col :span="12">
-        <el-card shadow="never" class="block">
-          <template #header>用户角色分布</template>
+        </a-card>
+      </a-col>
+      <a-col :span="12">
+        <a-card class="block" title="用户角色分布">
           <div v-for="row in userRoleRows" :key="row.role" class="dist-row">
             <span class="dist-label">{{ row.label }}</span>
-            <el-progress
+            <a-progress
               class="dist-bar"
-              :percentage="row.percent"
+              :percent="row.percent"
               :stroke-width="14"
-              :show-text="false"
+              :show-info="false"
+              stroke-color="var(--sasu-color-secondary)"
             />
             <span class="dist-count"><PointsNum :value="row.count" /></span>
           </div>
-        </el-card>
-      </el-col>
-    </el-row>
+        </a-card>
+      </a-col>
+    </a-row>
 
-    <el-row :gutter="16" class="mt16">
-      <el-col :span="8">
-        <el-card shadow="never" class="block">
-          <template #header>完成率</template>
+    <a-row :gutter="16" class="mt16 dash-row">
+      <a-col :span="8">
+        <a-card class="block" title="完成率">
           <div class="rate-box">
-            <el-progress type="circle" :percentage="completionRate" :width="120" />
+            <a-progress type="circle" :percent="completionRate" :size="120" />
             <p class="tip">已结算任务 / 应结算任务（近 30 天）</p>
           </div>
-        </el-card>
-      </el-col>
-      <el-col :span="8">
-        <el-card shadow="never" class="block">
-          <template #header>累计发放 / 退回</template>
+        </a-card>
+      </a-col>
+      <a-col :span="8">
+        <a-card class="block" title="累计发放 / 退回">
           <div class="row"><span>基础发放</span><b><PointsNum :value="overview?.paidBaseTotal ?? 0" suffix="分" /></b></div>
           <div class="row"><span>绩效发放</span><b><PointsNum :value="overview?.paidBonusTotal ?? 0" suffix="分" /></b></div>
           <div class="row"><span>退回积分池</span><b><PointsNum :value="overview?.refundedTotal ?? 0" suffix="分" /></b></div>
           <div class="row"><span>违约扣分合计</span><b><PointsNum :value="overview?.violationTotal ?? 0" suffix="分" /></b></div>
-        </el-card>
-      </el-col>
-      <el-col :span="8">
-        <el-card shadow="never" class="block">
-          <template #header>运维工具（手动触发定时作业）</template>
+        </a-card>
+      </a-col>
+      <a-col :span="8">
+        <a-card class="block" title="运维工具（手动触发定时作业）">
           <div v-for="job in jobs" :key="job.key" class="job-row">
             <div class="job-info">
               <b>{{ job.label }}</b>
               <p class="tip">{{ job.desc }}</p>
             </div>
-            <el-button
+            <a-button
               size="small"
               type="primary"
-              plain
+              ghost
               :loading="jobRunning === job.key"
               @click="runJob(job.key)"
             >
               执行
-            </el-button>
+            </a-button>
           </div>
-        </el-card>
-      </el-col>
-    </el-row>
+        </a-card>
+      </a-col>
+    </a-row>
 
     <!-- 对账 -->
-    <el-card shadow="never" class="block mt16">
-      <template #header>
+    <a-card class="block mt16">
+      <template #title>
         <div class="card-header-row">
           <span>积分账务对账</span>
-          <el-button size="small" :loading="reconcileLoading" @click="loadReconcile">重新对账</el-button>
+          <a-button size="small" :loading="reconcileLoading" @click="loadReconcile">重新对账</a-button>
         </div>
       </template>
       <template v-if="reconcile">
-        <el-result
+        <a-result
           v-if="reconcile.ok"
-          icon="success"
+          status="success"
           title="账务全部一致"
           sub-title="积分池、托管、用户账户与流水全部满足守恒不变式"
         />
         <template v-else>
-          <el-alert type="error" :closable="false" title="对账发现异常，以下不变式被破坏" show-icon />
-          <el-table :data="reconcile.violations" class="mt8">
-            <el-table-column prop="invariant" label="不变式编号" width="120" />
-            <el-table-column prop="detail" label="异常详情" />
-          </el-table>
+          <a-alert type="error" message="对账发现异常，以下不变式被破坏" show-icon />
+          <a-table :columns="violationColumns" :data-source="reconcile.violations" :pagination="false" class="mt8" row-key="invariant" />
         </template>
       </template>
-    </el-card>
-  </div>
+    </a-card>
+  </a-spin>
 </template>
 
 <style scoped>
@@ -291,12 +291,12 @@ onMounted(() => {
   box-shadow: var(--sasu-shadow-card);
   height: 100%;
 }
-/* 同一行内的卡片等高：el-col 变 flex，卡片撑满列高 */
-.equal-row > .el-col {
+/* 同一行内的卡片等高：a-col 变 flex，卡片撑满列高 */
+.dash-row :deep(.ant-col) {
   display: flex;
   flex-direction: column;
 }
-.equal-row > .el-col > .el-card {
+.dash-row .block {
   flex: 1;
 }
 .dist-row {
