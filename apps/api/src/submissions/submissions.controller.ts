@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Req, UploadedFiles, UseInterceptors } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
-import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { SubmissionsService } from './submissions.service';
 import { FilesService } from '../files/files.service';
 import { CurrentUser, type RequestUser } from '../common/guards/current-user.decorator';

@@ -8,10 +8,19 @@ import { AssignmentsService } from './assignments.service';
 import { SubmissionsController } from '../submissions/submissions.controller';
 import { SubmissionsService } from '../submissions/submissions.service';
 import { FilesService } from '../files/files.service';
+import { SettlementService } from './settlement.service';
 
 @Module({
   controllers: [TasksController, AdminTasksController, SubmissionsController],
-  providers: [TasksService, PricingService, LifecycleService, AssignmentsService, SubmissionsService, FilesService],
-  exports: [TasksService, AssignmentsService, SubmissionsService, FilesService],
+  providers: [
+    TasksService,
+    PricingService,
+    LifecycleService,
+    AssignmentsService,
+    SubmissionsService,
+    FilesService,
+    SettlementService,
+  ],
+  exports: [TasksService, AssignmentsService, SubmissionsService, FilesService, SettlementService],
 })
 export class TasksModule {}

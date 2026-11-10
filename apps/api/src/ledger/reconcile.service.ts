@@ -171,8 +171,8 @@ export class ReconcileService {
         push(9, `接单 ${a.id} 已发放 ${a.basePaid} 但无 TASK_PAYOUT/TASK_ARBITRATION 流水`);
       }
     }
-    const orphanPayouts = payoutTxs.filter((t) => t.assignmentId === null);
-    for (const t of orphanPayouts) push(9, `TASK_PAYOUT/TASK_ARBITRATION 缺少 assignment 关联`);
+    const orphanPayouts = payoutTxs.filter((tx) => tx.assignmentId === null);
+    for (const tx of orphanPayouts) push(9, `TASK_PAYOUT/TASK_ARBITRATION 缺少 assignment 关联`);
 
     // 不变式 11：biz_key 唯一（DB 约束兜底）；DEBT_OFFSET 键格式
     const badDebtKeys = await tx.pointTransaction.count({

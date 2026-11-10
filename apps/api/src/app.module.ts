@@ -14,6 +14,11 @@ import { SettingsModule } from './settings.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PointsModule } from './points/points.module';
 import { TasksModule } from './tasks/tasks.module';
+import { WithdrawalsModule } from './withdrawals/withdrawals.module';
+import { DisputesModule } from './disputes/disputes.module';
+import { CommunityModule } from './community/community.module';
+import { StatsModule } from './stats/stats.module';
+import { JobsModule } from './jobs/jobs.module';
 
 /**
  * M0 脚手架 + M1 账号/认证/分类/配置。
@@ -33,6 +38,11 @@ import { TasksModule } from './tasks/tasks.module';
     NotificationsModule,
     PointsModule,
     TasksModule,
+    WithdrawalsModule,
+    DisputesModule,
+    CommunityModule,
+    StatsModule,
+    JobsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },

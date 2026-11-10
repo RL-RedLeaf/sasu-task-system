@@ -39,7 +39,7 @@ export class TasksService {
   async create(
     operator: { id: bigint; role: 'STUDENT' | 'TEACHER' | 'ADMIN' },
     dto: CreateTaskDto,
-    meta: { requestId?: string },
+    _meta: { requestId?: string },
   ) {
     if (operator.role === 'STUDENT') throw ApiError.of('FORBIDDEN');
     const category = await this.prisma.taskCategory.findFirst({
