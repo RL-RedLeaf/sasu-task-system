@@ -79,6 +79,10 @@ router.beforeEach(async (to) => {
   if (auth.mustChangePassword && to.name !== 'change-password' && to.name !== 'profile') {
     return { name: 'change-password' };
   }
+  // 管理员的"首页"即管理控制台（公共首页仅学生/游客视角，避免管理员被落在无侧边栏的通用页）
+  if (to.name === 'home' && auth.role === 'ADMIN') {
+    return { name: 'admin-dashboard' };
+  }
   const roles = to.meta.roles as Role[] | undefined;
   if (roles && auth.role && !roles.includes(auth.role)) {
     return { name: 'forbidden' };

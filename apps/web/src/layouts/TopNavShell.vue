@@ -13,9 +13,11 @@ const route = useRoute();
 const router = useRouter();
 
 const isStudent = computed(() => auth.role === 'STUDENT');
-// 仅教师显示工作台入口；ADMIN 的管理功能收敛在 AdminShell 侧边栏，
-// 公共区保持纯浏览视角，避免顶栏/侧栏两套布局来回穿插
+// 仅教师显示任务管理入口；ADMIN 的管理功能收敛在 AdminShell 侧边栏，
+// 公共区保持纯浏览视角，避免顶栏/侧栏两套布局来回穿插。
+// 但要给管理员留明确的控制台入口（首页对管理员即 /admin，见路由守卫）。
 const isTeacher = computed(() => auth.role === 'TEACHER');
+const isAdmin = computed(() => auth.role === 'ADMIN');
 
 const roleLabel = labelOf.role;
 /** 用户下拉受控开合，便于键盘 Enter 触发。 */
@@ -53,7 +55,17 @@ if (auth.isLoggedIn) notify.startPolling();
           <span class="brand-name">校园任务平台</span>
         </RouterLink>
         <nav class="nav">
-          <RouterLink class="nav-item" :class="{ active: isActive('home') }" to="/">首页</RouterLink>
+          <RouterLink
+            v-if="isAdmin"
+            class="nav-item"
+            :class="{ active: route.name === 'admin-dashboard' }"
+            to="/admin"
+          >
+            工作台
+          </RouterLink>
+          <RouterLink v-else class="nav-item" :class="{ active: isActive('home') }" to="/">
+            首页
+          </RouterLink>
           <RouterLink class="nav-item" :class="{ active: isActive('hall') }" to="/tasks">任务大厅</RouterLink>
           <RouterLink
             v-if="isStudent"

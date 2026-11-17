@@ -28,7 +28,11 @@ async function onSubmit(): Promise<void> {
       return;
     }
     const redirect = route.query.redirect;
-    await router.push(typeof redirect === 'string' ? redirect : '/');
+    // 按角色落地（PRD §8：管理/教师端为独立侧边栏工作区）：
+    // 管理员直进控制台工作台，教师直进任务管理，学生留在公共首页
+    const fallback =
+      user.role === 'ADMIN' ? '/admin' : user.role === 'TEACHER' ? '/teacher/tasks' : '/';
+    await router.push(typeof redirect === 'string' ? redirect : fallback);
   } catch (error) {
     const err = error as NormalizedError;
     message.error(err.friendlyMessage ?? '登录失败');
