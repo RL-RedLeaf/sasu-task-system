@@ -6,12 +6,16 @@ import { COOKIE_NAME } from '../common/guards/auth.guard';
 import { CurrentUser, requestMeta, type RequestUser } from '../common/guards/current-user.decorator';
 import { Public } from '../common/guards/public.decorator';
 
-/** 会话 Cookie：httpOnly + SameSite=Lax，生产环境 Secure（PRD §11.2） */
+/** 会话 Cookie：httpOnly + SameSite=Lax；PUBLIC_ORIGIN 为 https 时 Secure（PRD §11.2） */
 function sessionCookieOptions(days: number): CookieOptions {
+  const origin = process.env.PUBLIC_ORIGIN?.trim().toLowerCase();
+  // 无域名/无证书的临时 HTTP 试用（如 http://IP:8080）必须显式关闭 Secure，否则浏览器不保存 Cookie；
+  // 正式环境把 PUBLIC_ORIGIN 配成 https:// 即可恢复 Secure。
+  const secure = origin ? origin.startsWith('https://') : process.env.NODE_ENV === 'production';
   return {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure,
     maxAge: days * 24 * 3600 * 1000,
     path: '/',
   };

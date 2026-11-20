@@ -28,6 +28,11 @@ try {
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('bootstrap');
+  if (env.NODE_ENV === 'production' && env.PUBLIC_ORIGIN?.toLowerCase().startsWith('http://')) {
+    logger.warn(
+      'PUBLIC_ORIGIN 使用 http://：会话 Cookie 不启用 Secure，仅适用于临时试用；正式上线请改为 https://',
+    );
+  }
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log'],
   });

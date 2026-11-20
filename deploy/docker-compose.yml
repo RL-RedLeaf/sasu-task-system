@@ -11,6 +11,7 @@ services:
       dockerfile: deploy/Dockerfile
       target: web
     ports:
+      # 未备案试用：改为 '8080:80'，并同步把 .env 的 PUBLIC_ORIGIN 改成 http://公网IP:8080
       - '80:80'
     depends_on:
       api:

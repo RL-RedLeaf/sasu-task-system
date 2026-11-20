@@ -10,8 +10,8 @@ ARG NODE_IMAGE=node:24-slim
 FROM ${NODE_IMAGE} AS build
 WORKDIR /repo
 RUN corepack enable
-# 先拷依赖清单再 install，充分利用层缓存
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+# 先拷依赖清单与根 tsconfig（子包 tsconfig 均 extends ../../tsconfig.base.json）
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
@@ -20,8 +20,11 @@ COPY packages/shared packages/shared
 COPY apps/api apps/api
 COPY apps/web apps/web
 RUN pnpm build
-# 物化 api 运行时：包文件（含 dist/、prisma/）+ 生产依赖（含生成的 Prisma 客户端）
-RUN pnpm --filter @sasu/api deploy --prod /out/api
+# 生产镜像不装 tsx：把 prisma/seed.ts 打成单文件，容器内用 node prisma/seed.cjs 执行
+RUN pnpm --filter @sasu/api seed:bundle
+# 物化 api 运行时：包文件（含 dist/、prisma/、seed.cjs）+ 生产依赖（含生成的 Prisma 客户端）
+# pnpm 10+ 对未启用 inject-workspace-packages 的 workspace 需要 --legacy 才能 deploy
+RUN pnpm --filter @sasu/api deploy --prod --legacy /out/api
 
 # ---------- stage 2: api ----------
 FROM ${NODE_IMAGE} AS api

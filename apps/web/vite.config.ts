@@ -19,6 +19,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // 允许通过外网域名访问 dev server（否则 Vite 会报 "Blocked request. This host is not allowed"）
+    allowedHosts: ['sd.owo.lat'],
     proxy: {
       // 开发期代理到本地 api（生产由 nginx 转发，见 deploy/nginx.conf）
       '/api': { target: 'http://localhost:3000', changeOrigin: true },
@@ -28,6 +30,7 @@ export default defineConfig({
   preview: {
     // 生产构建本地预览（vite preview），与 server 同样的代理
     port: 4173,
+    allowedHosts: ['sd.owo.lat'],
     proxy: {
       '/api': { target: 'http://localhost:3000', changeOrigin: true },
       '/healthz': { target: 'http://localhost:3000', changeOrigin: true },
